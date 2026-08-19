@@ -225,6 +225,73 @@ def news(feed: str = typer.Option("news", "--feed", help="news | advisories"), l
 
 
 @app.command()
+def digest(zips: str = typer.Option("", "--zips", help="Comma-separated zips to watch"),
+           counties: str = typer.Option("", "--counties", help="Comma-separated counties to watch"),
+           watch: str = typer.Option("", "--watch", help="Comma-separated file numbers to track"),
+           as_json: bool = json_opt):
+    """Headless daily compliance brief — the residual product in miniature.
+    Runs fine unattended (cron); prints a compact digest that an agent or email
+    relay can deliver each morning. Newest PEND filings are approximated by
+    descending file number (ABC numbers rise with filing order)."""
+    import json as _json
+
+    from . import statuses as st
+    from . import news as news_mod
+
+    client = _client()
+    info = client.snapshot_info()
+    svc = st.status_overview(client.con)
+    areas = [(zips, "zip"), (counties, "county")]
+
+    lines = [f"ABC COMPLIANCE BRIEF — data as of {info.csv_date} ({info.row_count:,} records)", ""]
+    lines.append(f"Statewide: {svc['observed_in_export'].get('ACTIVE',0):,} active · "
+                 f"{svc['observed_in_export'].get('PEND',0):,} pending · "
+                 f"{svc['overdue_active_licenses']:,} OVERDUE (auto-revocation risk)")
+
+    for areas_str, kind in areas:
+        for a in [x.strip() for x in areas_str.split(",") if x.strip()]:
+            pend = client.pending(a, kind, limit=8)
+            pend.sort(key=lambda r: r["file_number"], reverse=True)  # newest first
+            ovr = client.overdue(0, a, kind, limit=5)
+            exp = client.expiring(60, a, kind, limit=5)
+            lines.append("")
+            lines.append(f"[{kind.upper()} {a}] — {len(pend)} pending, "
+                         f"{len(client.overdue(0, a, kind, limit=1))} overdue, "
+                         f"{len(client.expiring(60, a, kind, limit=1))} expiring ≤60d")
+            lines.append(f"  Newest pending:")
+            for r in pend[:5]:
+                t = license_types.short(str(r.get("license_type", "")).strip())
+                lines.append(f"    {r['file_number']} [{t}] {r['primary_name'] or '—'} @ {r.get('prem_addr1','') or ''} {r.get('prem_city','')}")
+            if ovr:
+                lines.append(f"  Overdue:")
+                for r in ovr:
+                    lines.append(f"    {r['file_number']} {r['primary_name']} exp {r['expire_date']}")
+            if exp:
+                lines.append(f"  Expiring ≤60d:")
+                for r in exp:
+                    lines.append(f"    {r['file_number']} {r['primary_name']} exp {r['expire_date']}")
+
+    if watch:
+        lines.append("")
+        lines.append("[WATCHED FILE NUMBERS]")
+        for fn in [w.strip() for w in watch.split(",") if w.strip()]:
+            for r in client.get(fn):
+                lines.append(f"  {r['file_number']} [{r['status']}] {r['primary_name']} "
+                             f"({license_types.short(str(r['license_type']).strip())})")
+
+    lines.append("")
+    lines.append("[LATEST ADVISORIES]")
+    for item in news_mod.fetch_feed("advisories", 3):
+        lines.append(f"  {item['published']} {item['title']}")
+
+    out = "\n".join(lines)
+    if as_json:
+        print(_json.dumps({"brief": out}, indent=2))
+    else:
+        print(out)
+
+
+@app.command()
 def serve():
     """Run the MCP server over stdio (for Hermes/Claude/agents)."""
     from .server import mcp
