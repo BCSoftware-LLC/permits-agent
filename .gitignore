@@ -1,0 +1,24 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+*.egg-info/
+dist/
+build/
+
+# Local mirrors / caches (never commit)
+*.duckdb
+*.csv
+license_types.json
+forms_index.json
+fees.json
+
+# OS / editors
+.DS_Store
+*.swp
+.idea/
+.vscode/
+
+# Env / secrets
+.env
+.env.*
