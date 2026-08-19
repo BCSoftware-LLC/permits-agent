@@ -85,10 +85,13 @@ def refresh():
 @app.command()
 def search(query: str, status: str = None, county: str = None, city: str = None,
            type: str = typer.Option(None, "--type", help="License type code, e.g. 47"),
+           lic_or_app: str = typer.Option(None, "--lic-or-app", help="LIC (issued) or APP (application)"),
+           expires: str = typer.Option(None, "--expires", help="Only records expiring in this calendar year, e.g. 2026"),
            limit: int = 20, json: bool = json_opt):
     """Full-text search over licensee name / DBA / file number."""
     rows = _clean(_client().search(query, status=status, county=county, city=city,
-                                   license_type=type, limit=limit))
+                                   license_type=type, lic_or_app=lic_or_app,
+                                   expire_year=expires, limit=limit))
     _out(rows, json, lambda: _table(rows, ["type", "type_desc", "file_number", "status", "name", "dba", "address", "expire"]))
 
 
@@ -105,17 +108,23 @@ def get(file_number: str, json: bool = json_opt):
 @app.command()
 def by(zip: str = typer.Option(None, "--zip"), city: str = None, county: str = None,
        district: str = None, status: str = None, type: str = typer.Option(None, "--type"),
+       lic_or_app: str = typer.Option(None, "--lic-or-app", help="LIC (issued) or APP (application)"),
+       expires: str = typer.Option(None, "--expires", help="Only records expiring in this calendar year, e.g. 2026"),
        limit: int = 100, json: bool = json_opt):
     """List licenses/apps in an area (--zip / --city / --county / --district)."""
     client = _client()
     if zip:
-        rows = _clean(client.by_area(zip, "zip", status=status, license_type=type, limit=limit))
+        rows = _clean(client.by_area(zip, "zip", status=status, license_type=type,
+                                     lic_or_app=lic_or_app, expire_year=expires, limit=limit))
     elif city:
-        rows = _clean(client.by_area(city, "city", status=status, license_type=type, limit=limit))
+        rows = _clean(client.by_area(city, "city", status=status, license_type=type,
+                                     lic_or_app=lic_or_app, expire_year=expires, limit=limit))
     elif county:
-        rows = _clean(client.by_area(county, "county", status=status, license_type=type, limit=limit))
+        rows = _clean(client.by_area(county, "county", status=status, license_type=type,
+                                     lic_or_app=lic_or_app, expire_year=expires, limit=limit))
     elif district:
-        rows = _clean(client.by_area(district, "district", status=status, license_type=type, limit=limit))
+        rows = _clean(client.by_area(district, "district", status=status, license_type=type,
+                                     lic_or_app=lic_or_app, expire_year=expires, limit=limit))
     else:
         raise typer.BadParameter("provide one of --zip / --city / --county / --district")
     _out(rows, json, lambda: _table(rows, ["type", "type_desc", "file_number", "status", "name", "address", "expire"]))
@@ -156,10 +165,13 @@ def expiring(days: int = 90, zip: str = typer.Option(None, "--zip"), city: str =
 @app.command()
 def address(fragment: str, mail: bool = typer.Option(False, "--mail", help="Also match mailing addresses (entity-level)"),
             status: str = None, type: str = typer.Option(None, "--type"),
+            lic_or_app: str = typer.Option(None, "--lic-or-app", help="LIC (issued) or APP (application)"),
+            expires: str = typer.Option(None, "--expires", help="Only records expiring in this calendar year, e.g. 2026"),
             limit: int = 100, json: bool = json_opt):
     """Identify every license/application tied to an address (street, number, city, or zip)."""
     rows = _clean(_client().by_address(fragment, match_mail=mail, status=status,
-                                       license_type=type, limit=limit))
+                                       license_type=type, lic_or_app=lic_or_app,
+                                       expire_year=expires, limit=limit))
     _out(rows, json, lambda: _table(rows, ["type", "type_desc", "file_number", "status", "name", "dba", "address", "expire"]))
 
 
@@ -289,6 +301,38 @@ def digest(zips: str = typer.Option("", "--zips", help="Comma-separated zips to 
         print(_json.dumps({"brief": out}, indent=2))
     else:
         print(out)
+
+
+@app.command()
+def history_snapshot(json: bool = json_opt):
+    """Append today's status snapshot to the history table (the proprietary
+    status-change record — survives mirror rebuilds). Idempotent per day."""
+    from . import history
+    data = history.snapshot(_client().con)
+    _out(data, json)
+
+
+@app.command()
+def history_diff(json: bool = json_opt):
+    """Status/expiry changes between the two most recent snapshots — the
+    transition record (ACTIVE→SUSPEN→REV) that powers verification and alerts."""
+    from . import history
+    data = history.diff(_client().con)
+    if data.get("status") == "need_more_snapshots":
+        _out(data, json)
+        return
+    if json:
+        _out(data, json)
+        return
+    print(f"Diff {data['from']} → {data['to']}: {data['transition_count']} status "
+          f"transitions, {data['added_count']} added, {data['removed_count']} removed")
+    for t in data["transitions"][:30]:
+        print(f"  {t['file_number']} [{t['license_type']}] {t['prev_status']} → {t['new_status']}"
+              + (f"  (exp {t['prev_expire']} → {t['new_expire']})" if t['prev_expire'] != t['new_expire'] else ""))
+    if data["added_count"]:
+        print("  NEW:", ", ".join(f"{a['file_number']} [{a['status']}]" for a in data["added"][:15]))
+    if data["removed_count"]:
+        print("  GONE:", ", ".join(f"{r['file_number']} [{r['status']}]" for r in data["removed"][:15]))
 
 
 @app.command()

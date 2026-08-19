@@ -40,11 +40,15 @@ def client() -> db.ABCClient:
 @mcp.tool()
 def search_licenses(query: str, status: str | None = None, county: str | None = None,
                     city: str | None = None, license_type: str | None = None,
+                    lic_or_app: str | None = None, expire_year: str | None = None,
                     limit: int = 50) -> list[dict]:
     """Search ABC licenses/applications by licensee name, DBA, or file number.
-    Optionally filter by status (ACTIVE/PEND/SUREND/...), county, city, or license type code."""
+    Filters: status (ACTIVE/PEND/SUREND/...), county, city, license type code,
+    lic_or_app (LIC=issued / APP=application), expire_year (e.g. '2026' for
+    records whose expiration falls in that calendar year)."""
     return _clean(client().search(query, status=status, county=county, city=city,
-                                  license_type=license_type, limit=min(limit, 200)))
+                                  license_type=license_type, lic_or_app=lic_or_app,
+                                  expire_year=expire_year, limit=min(limit, 200)))
 
 
 @mcp.tool()
@@ -85,13 +89,16 @@ def expiring_licenses(days: int = 90, zip: str | None = None, city: str | None =
 
 @mcp.tool()
 def licenses_at_address(fragment: str, match_mail: bool = False, status: str | None = None,
-                        license_type: str | None = None, limit: int = 100) -> list[dict]:
+                        license_type: str | None = None, lic_or_app: str | None = None,
+                        expire_year: str | None = None, limit: int = 100) -> list[dict]:
     """Identify every license/application tied to an address. `fragment` can be a
     street name, street + number, city, or zip. With match_mail=True also matches
     mailing addresses (entity-level identification — every license whose owner
-    files from the same mail address). Filters: status, license_type."""
+    files from the same mail address). Filters: status, license_type, lic_or_app,
+    expire_year."""
     return _clean(client().by_address(fragment, match_mail=match_mail, status=status,
-                                      license_type=license_type, limit=limit))
+                                      license_type=license_type, lic_or_app=lic_or_app,
+                                      expire_year=expire_year, limit=limit))
 
 
 @mcp.tool()
@@ -125,18 +132,24 @@ def status_overview() -> dict:
 @mcp.tool()
 def licenses_in_area(zip: str | None = None, city: str | None = None, county: str | None = None,
                      district: str | None = None, status: str | None = None,
-                     license_type: str | None = None,
+                     license_type: str | None = None, lic_or_app: str | None = None,
+                     expire_year: str | None = None,
                      limit: int = 200) -> list[dict]:
-    """List licenses/applications in a zip, city, county, or ABC district, with optional filters."""
+    """List licenses/applications in a zip, city, county, or ABC district.
+    Filters: status, license_type, lic_or_app, expire_year."""
     c = client()
     if zip:
-        return _clean(c.by_area(zip, "zip", status=status, license_type=license_type, limit=limit))
+        return _clean(c.by_area(zip, "zip", status=status, license_type=license_type,
+                                lic_or_app=lic_or_app, expire_year=expire_year, limit=limit))
     if city:
-        return _clean(c.by_area(city, "city", status=status, license_type=license_type, limit=limit))
+        return _clean(c.by_area(city, "city", status=status, license_type=license_type,
+                                lic_or_app=lic_or_app, expire_year=expire_year, limit=limit))
     if county:
-        return _clean(c.by_area(county, "county", status=status, license_type=license_type, limit=limit))
+        return _clean(c.by_area(county, "county", status=status, license_type=license_type,
+                                lic_or_app=lic_or_app, expire_year=expire_year, limit=limit))
     if district:
-        return _clean(c.by_area(district, "district", status=status, license_type=license_type, limit=limit))
+        return _clean(c.by_area(district, "district", status=status, license_type=license_type,
+                                lic_or_app=lic_or_app, expire_year=expire_year, limit=limit))
     return []
 
 

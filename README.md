@@ -38,11 +38,20 @@ abc-agent pending --zip 90028    # new filings in a territory (lead radar)
 abc-agent expiring --days 60 --county "LOS ANGELES"
 abc-agent overdue --county "LOS ANGELES"  # auto-revocation candidates
 abc-agent by --district 04       # licenses in an ABC district
+abc-agent by --county "SAN DIEGO" --type 21 --status SUREND --lic-or-app LIC --expires 2026
 abc-agent get 00677768
 abc-agent forms --search "transfer"
 abc-agent news --feed advisories
+abc-agent history-snapshot       # daily status snapshot (the history moat)
+abc-agent history-diff           # status transitions since last snapshot
 abc-agent serve                  # MCP server over stdio
 ```
+
+Every query surface (`search`, `by`, `address` — CLI and MCP) shares one filter
+vocabulary: `--status` / `--type` / `--lic-or-app` (LIC issued vs APP
+application) / `--expires <year>` (records expiring in a calendar year).
+Surrendered applications (APP) carry blank expiration dates in the ABC export;
+surrendered licenses (LIC) carry real ones.
 
 MCP registration (any agent host):
 

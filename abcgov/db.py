@@ -169,23 +169,45 @@ class ABCClient:
         )
 
     # ---- queries ---------------------------------------------------------
-    def search(self, query: str, status: Optional[str] = None, county: Optional[str] = None,
-               city: Optional[str] = None, license_type: Optional[str] = None,
-               limit: int = 50) -> list[dict]:
-        q = "WHERE (primary_name ILIKE ? OR dba_name ILIKE ? OR file_number ILIKE ?)"
-        args: list = [f"%{query}%", f"%{query}%", f"%{query}%"]
+    @staticmethod
+    def _filters(q: str, args: list, *, status: Optional[str] = None,
+                 license_type: Optional[str] = None, lic_or_app: Optional[str] = None,
+                 expire_year: Optional[str] = None) -> tuple[str, list]:
+        """Append the shared filter vocabulary to a query: status, license type,
+        lic_or_app, and expiration calendar year (export format DD-MON-YYYY, so
+        expire_year='2026' matches '%-2026'). Blank dates never match a year.
+        One vocabulary → CLI and MCP stay consistent on every query surface."""
         if status:
             q += " AND status = ?"
             args.append(status.upper())
+        if license_type:
+            q += " AND license_type = ?"
+            args.append(license_type)
+        if lic_or_app:
+            q += " AND lic_or_app = ?"
+            args.append(lic_or_app.upper())
+        if expire_year:
+            y = str(expire_year).strip()
+            if not (y.isdigit() and len(y) == 4):
+                raise ValueError(f"expire_year must be a 4-digit year, got {expire_year!r}")
+            q += " AND expire_date LIKE ?"
+            args.append(f"%-{y}")
+        return q, args
+
+    def search(self, query: str, status: Optional[str] = None, county: Optional[str] = None,
+               city: Optional[str] = None, license_type: Optional[str] = None,
+               lic_or_app: Optional[str] = None, expire_year: Optional[str] = None,
+               limit: int = 50) -> list[dict]:
+        q = "WHERE (primary_name ILIKE ? OR dba_name ILIKE ? OR file_number ILIKE ?)"
+        args: list = [f"%{query}%", f"%{query}%", f"%{query}%"]
         if county:
             q += " AND prem_county ILIKE ?"
             args.append(f"%{county}%")
         if city:
             q += " AND prem_city ILIKE ?"
             args.append(f"%{city}%")
-        if license_type:
-            q += " AND license_type = ?"
-            args.append(license_type)
+        q, args = self._filters(q, args, status=status, license_type=license_type,
+                                lic_or_app=lic_or_app, expire_year=expire_year)
         q += " ORDER BY primary_name LIMIT ?"
         args.append(limit)
         rows = self.con.execute(f"SELECT * FROM licenses {q}", args).fetchall()
@@ -201,19 +223,16 @@ class ABCClient:
         return [dict(zip(cols, r)) for r in rows]
 
     def by_area(self, area: str, kind: str = "zip", status: Optional[str] = None,
-                license_type: Optional[str] = None, limit: int = 200) -> list[dict]:
+                license_type: Optional[str] = None, lic_or_app: Optional[str] = None,
+                expire_year: Optional[str] = None, limit: int = 200) -> list[dict]:
         col = {"zip": "prem_zip", "city": "prem_city", "county": "prem_county",
                "district": "district"}.get(kind)
         if not col:
             raise ValueError("kind must be zip|city|county|district")
         q = f"WHERE {col} ILIKE ?"
         args: list = [f"{area}%"]
-        if status:
-            q += " AND status = ?"
-            args.append(status.upper())
-        if license_type:
-            q += " AND license_type = ?"
-            args.append(license_type)
+        q, args = self._filters(q, args, status=status, license_type=license_type,
+                                lic_or_app=lic_or_app, expire_year=expire_year)
         q += " ORDER BY primary_name LIMIT ?"
         args.append(limit)
         rows = self.con.execute(f"SELECT * FROM licenses {q}", args).fetchall()
@@ -221,7 +240,8 @@ class ABCClient:
         return [dict(zip(cols, r)) for r in rows]
 
     def by_address(self, fragment: str, match_mail: bool = False, status: Optional[str] = None,
-                   license_type: Optional[str] = None, limit: int = 200) -> list[dict]:
+                   license_type: Optional[str] = None, lic_or_app: Optional[str] = None,
+                   expire_year: Optional[str] = None, limit: int = 200) -> list[dict]:
         """Find every license/application whose PREMISES address matches a fragment
         (street, street + number, city, or zip). With match_mail=True, also matches
         the mailing address — useful for entity-level identification."""
@@ -231,12 +251,8 @@ class ABCClient:
             cols += ["mail_addr1", "mail_addr2", "mail_city", "mail_zip", "mail_state"]
         q = "WHERE " + " OR ".join(f"{c} ILIKE ?" for c in cols)
         args: list = [like] * len(cols)
-        if status:
-            q += " AND status = ?"
-            args.append(status.upper())
-        if license_type:
-            q += " AND license_type = ?"
-            args.append(license_type)
+        q, args = self._filters(q, args, status=status, license_type=license_type,
+                                lic_or_app=lic_or_app, expire_year=expire_year)
         q += " ORDER BY prem_addr1, primary_name LIMIT ?"
         args.append(limit)
         rows = self.con.execute(f"SELECT * FROM licenses {q}", args).fetchall()
