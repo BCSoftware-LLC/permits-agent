@@ -30,9 +30,14 @@ source .venv/bin/activate        # or: uv venv --python 3.11 .venv && uv pip ins
 pip install -e .
 
 abc-agent refresh                # download + build mirror (~7 MB, once/day)
+abc-agent stats                  # snapshot summary
+abc-agent statuses               # full status vocabulary + observed counts + overdue
 abc-agent search "stater bros"
+abc-agent address "6417 SELMA AVE"   # every license at one address
 abc-agent pending --zip 90028    # new filings in a territory (lead radar)
 abc-agent expiring --days 60 --county "LOS ANGELES"
+abc-agent overdue --county "LOS ANGELES"  # auto-revocation candidates
+abc-agent by --district 04       # licenses in an ABC district
 abc-agent get 00677768
 abc-agent forms --search "transfer"
 abc-agent news --feed advisories
@@ -58,7 +63,7 @@ abcgov/            CA ABC adapter (reference implementation)
   fees.py          surcharge table + fee page text
   news.py          news RSS + advisory page parsing
   cli.py           typer CLI
-  server.py        FastMCP server (11 tools, 2 resources)
+  server.py        FastMCP server (14 tools, 2 resources)
 docs/              architecture + data-source notes (see docs/)
 tests/             end-to-end MCP stdio smoke test
 ```

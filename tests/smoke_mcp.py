@@ -47,6 +47,15 @@ async def main():
             print("\n=== call fee_surcharges ===")
             show(await session.call_tool("fee_surcharges", {}))
 
+            print("\n=== call licenses_at_address('6417 SELMA', limit=4) ===")
+            show(await session.call_tool("licenses_at_address", {"fragment": "6417 SELMA", "limit": 4}))
+
+            print("\n=== call overdue_licenses(county='LOS ANGELES', limit=3) ===")
+            show(await session.call_tool("overdue_licenses", {"county": "LOS ANGELES", "limit": 3}))
+
+            print("\n=== call status_overview ===")
+            show(await session.call_tool("status_overview", {}))
+
             print("\n=== resources ===")
             resources = await session.list_resources()
             print([r.uri for r in resources.resources])

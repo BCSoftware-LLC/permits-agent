@@ -84,10 +84,50 @@ def expiring_licenses(days: int = 90, zip: str | None = None, city: str | None =
 
 
 @mcp.tool()
+def licenses_at_address(fragment: str, match_mail: bool = False, status: str | None = None,
+                        license_type: str | None = None, limit: int = 100) -> list[dict]:
+    """Identify every license/application tied to an address. `fragment` can be a
+    street name, street + number, city, or zip. With match_mail=True also matches
+    mailing addresses (entity-level identification — every license whose owner
+    files from the same mail address). Filters: status, license_type."""
+    return _clean(client().by_address(fragment, match_mail=match_mail, status=status,
+                                      license_type=license_type, limit=limit))
+
+
+@mcp.tool()
+def overdue_licenses(min_days_past: int = 0, zip: str | None = None, city: str | None = None,
+                     county: str | None = None, district: str | None = None,
+                     limit: int = 100) -> list[dict]:
+    """Still-ACTIVE licenses past their expiration date — renewal-failure /
+    auto-revocation candidates (ABC auto-revokes for unpaid annual fees).
+    Optional area filter by zip/city/county/district."""
+    c = client()
+    if zip:
+        return _clean(c.overdue(min_days_past, zip, "zip", limit=limit))
+    if city:
+        return _clean(c.overdue(min_days_past, city, "city", limit=limit))
+    if county:
+        return _clean(c.overdue(min_days_past, county, "county", limit=limit))
+    if district:
+        return _clean(c.overdue(min_days_past, district, "district", limit=limit))
+    return _clean(c.overdue(min_days_past, limit=limit))
+
+
+@mcp.tool()
+def status_overview() -> dict:
+    """Full ABC status vocabulary (official LQS glossary: ACTIVE, PEND, REV, REVP,
+    NREN, WDRL, …) plus the statuses currently observed in the export and the
+    count of overdue (auto-revocation candidate) licenses."""
+    from . import statuses as st
+    return st.status_overview(client().con)
+
+
+@mcp.tool()
 def licenses_in_area(zip: str | None = None, city: str | None = None, county: str | None = None,
-                     status: str | None = None, license_type: str | None = None,
+                     district: str | None = None, status: str | None = None,
+                     license_type: str | None = None,
                      limit: int = 200) -> list[dict]:
-    """List licenses/applications in a zip, city, or county, with optional filters."""
+    """List licenses/applications in a zip, city, county, or ABC district, with optional filters."""
     c = client()
     if zip:
         return _clean(c.by_area(zip, "zip", status=status, license_type=license_type, limit=limit))
@@ -95,6 +135,8 @@ def licenses_in_area(zip: str | None = None, city: str | None = None, county: st
         return _clean(c.by_area(city, "city", status=status, license_type=license_type, limit=limit))
     if county:
         return _clean(c.by_area(county, "county", status=status, license_type=license_type, limit=limit))
+    if district:
+        return _clean(c.by_area(district, "district", status=status, license_type=license_type, limit=limit))
     return []
 
 

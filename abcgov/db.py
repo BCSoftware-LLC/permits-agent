@@ -123,20 +123,27 @@ def load_to_duckdb(csv_path: Optional[Path] = None, force: bool = False) -> duck
             SELECT * FROM read_csv_auto('{csv_path}', header=true, skip=1, null_padding=true)
             """
         )
-        con.execute("ALTER TABLE licenses RENAME COLUMN \"License Type\" TO license_type")
-        # Normalize + index.
         con.execute("""
+            ALTER TABLE licenses RENAME COLUMN "License Type" TO license_type;
             ALTER TABLE licenses RENAME COLUMN "File Number" TO file_number;
             ALTER TABLE licenses RENAME COLUMN "Lic or App" TO lic_or_app;
             ALTER TABLE licenses RENAME COLUMN "Type Status" TO status;
             ALTER TABLE licenses RENAME COLUMN "Primary Name" TO primary_name;
             ALTER TABLE licenses RENAME COLUMN "DBA Name" TO dba_name;
+            ALTER TABLE licenses RENAME COLUMN "Prem Addr 1" TO prem_addr1;
+            ALTER TABLE licenses RENAME COLUMN "Prem Addr 2" TO prem_addr2;
             ALTER TABLE licenses RENAME COLUMN "Prem City" TO prem_city;
-            ALTER TABLE licenses RENAME COLUMN "Prem County" TO prem_county;
+            ALTER TABLE licenses RENAME COLUMN "Prem State" TO prem_state;
             ALTER TABLE licenses RENAME COLUMN "Prem Zip" TO prem_zip;
+            ALTER TABLE licenses RENAME COLUMN "Prem County" TO prem_county;
             ALTER TABLE licenses RENAME COLUMN "Expir Date" TO expire_date;
             ALTER TABLE licenses RENAME COLUMN "District" TO district;
             ALTER TABLE licenses RENAME COLUMN "Type Orig Iss Date" TO orig_issue_date;
+            ALTER TABLE licenses RENAME COLUMN "Mail Addr 1" TO mail_addr1;
+            ALTER TABLE licenses RENAME COLUMN "Mail Addr 2" TO mail_addr2;
+            ALTER TABLE licenses RENAME COLUMN "Mail City" TO mail_city;
+            ALTER TABLE licenses RENAME COLUMN "Mail State" TO mail_state;
+            ALTER TABLE licenses RENAME COLUMN "Mail Zip" TO mail_zip;
         """)
         con.execute("CREATE INDEX IF NOT EXISTS idx_file ON licenses(file_number)")
         con.execute("CREATE INDEX IF NOT EXISTS idx_name ON licenses(primary_name)")
@@ -195,9 +202,10 @@ class ABCClient:
 
     def by_area(self, area: str, kind: str = "zip", status: Optional[str] = None,
                 license_type: Optional[str] = None, limit: int = 200) -> list[dict]:
-        col = {"zip": "prem_zip", "city": "prem_city", "county": "prem_county"}.get(kind)
+        col = {"zip": "prem_zip", "city": "prem_city", "county": "prem_county",
+               "district": "district"}.get(kind)
         if not col:
-            raise ValueError("kind must be zip|city|county")
+            raise ValueError("kind must be zip|city|county|district")
         q = f"WHERE {col} ILIKE ?"
         args: list = [f"{area}%"]
         if status:
@@ -207,6 +215,48 @@ class ABCClient:
             q += " AND license_type = ?"
             args.append(license_type)
         q += " ORDER BY primary_name LIMIT ?"
+        args.append(limit)
+        rows = self.con.execute(f"SELECT * FROM licenses {q}", args).fetchall()
+        cols = [d[0] for d in self.con.description]
+        return [dict(zip(cols, r)) for r in rows]
+
+    def by_address(self, fragment: str, match_mail: bool = False, status: Optional[str] = None,
+                   license_type: Optional[str] = None, limit: int = 200) -> list[dict]:
+        """Find every license/application whose PREMISES address matches a fragment
+        (street, street + number, city, or zip). With match_mail=True, also matches
+        the mailing address — useful for entity-level identification."""
+        like = f"%{fragment.strip().upper()}%"
+        cols = ["prem_addr1", "prem_addr2", "prem_city", "prem_zip", "prem_state"]
+        if match_mail:
+            cols += ["mail_addr1", "mail_addr2", "mail_city", "mail_zip", "mail_state"]
+        q = "WHERE " + " OR ".join(f"{c} ILIKE ?" for c in cols)
+        args: list = [like] * len(cols)
+        if status:
+            q += " AND status = ?"
+            args.append(status.upper())
+        if license_type:
+            q += " AND license_type = ?"
+            args.append(license_type)
+        q += " ORDER BY prem_addr1, primary_name LIMIT ?"
+        args.append(limit)
+        rows = self.con.execute(f"SELECT * FROM licenses {q}", args).fetchall()
+        cols = [d[0] for d in self.con.description]
+        return [dict(zip(cols, r)) for r in rows]
+
+    def overdue(self, min_days_past: int = 0, area: Optional[str] = None, kind: str = "zip",
+                limit: int = 200) -> list[dict]:
+        """Records still marked ACTIVE whose expiration date is in the past —
+        renewal-failure / auto-revocation candidates."""
+        cutoff = (date.today() - timedelta(days=min_days_past)).isoformat()
+        q = ("WHERE status = 'ACTIVE' AND expire_date IS NOT NULL AND trim(expire_date) != '' "
+             "AND strptime(trim(expire_date), '%d-%b-%Y')::DATE < CAST(? AS DATE)")
+        args: list = [cutoff]
+        if area:
+            col = {"zip": "prem_zip", "city": "prem_city", "county": "prem_county",
+                   "district": "district"}[kind]
+            q += f" AND {col} ILIKE ?"
+            args.append(f"{area}%")
+        q += " ORDER BY expire_date LIMIT ?"
         args.append(limit)
         rows = self.con.execute(f"SELECT * FROM licenses {q}", args).fetchall()
         cols = [d[0] for d in self.con.description]

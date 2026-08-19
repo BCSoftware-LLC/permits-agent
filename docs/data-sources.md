@@ -23,9 +23,26 @@ Prem Zip · DBA Name · Mail Addr · Prem County · Prem Census Tract #
   string compare is wrong.
 - **File numbers are NOT unique** — one file number = multiple rows (one per
   license type). `get` returns all rows.
-- Statuses: ACTIVE (118,981) · PEND (6,620) · SUREND (2,376) · REVPEN (410) ·
-  SUSPEN (357) · R64B (126). `Lic or App`: LIC 108,840 / APP 20,030.
+- **Header names with leading spaces** (`" Prem Addr 2"`, `" Prem Zip"`, …)
+  are trimmed by DuckDB's `read_csv_auto` — renames use trimmed names.
+- Statuses currently observed: ACTIVE (118,981) · PEND (6,620) · SUREND (2,376)
+  · REVPEN (410) · SUSPEN (357) · R64B (126). `Lic or App`: LIC 108,840 / APP 20,030.
 - Some premises addresses are empty for pending apps; zip may carry `-NNNN`.
+
+### Address identification
+`prem_addr1/2` + `prem_city` + `prem_zip` + `prem_state` identify the licensed
+premises; `mail_addr1/2` + `mail_city` + `mail_zip` identify the owner/entity.
+`licenses_at_address` matches premises (or + mail with `match_mail=true`) —
+every license tied to one physical address, including multi-permit sites
+(e.g. a hotel holding 47/58/66/68/77 together) and same-owner portfolios.
+
+### Status vocabulary (ABC LQS glossary, captured 2026-08-19)
+The export only shows a subset at any moment; licenses move through the full
+vocabulary: ACTIVE · PEND · DENY · INACT · ISSUPD · NREN · R64B (Issue And
+Hold) · R65 · REV (Revocation) · REVP (Revocation Pending Due To Non-Payment —
+the **auto-revocation path**) · REVPEN · RNST · SUSPEN · SUREND · S/REV ·
+SLMS · VOID · WDRL. Derived: **OVERDUE** = still ACTIVE past expiration
+(2,553 statewide on 2026-08-19) — renewal-failure / auto-revocation candidates.
 
 ## Reference pages (scraped once, cached as JSON)
 

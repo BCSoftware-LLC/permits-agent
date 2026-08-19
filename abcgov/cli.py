@@ -104,9 +104,9 @@ def get(file_number: str, json: bool = json_opt):
 
 @app.command()
 def by(zip: str = typer.Option(None, "--zip"), city: str = None, county: str = None,
-       status: str = None, type: str = typer.Option(None, "--type"),
+       district: str = None, status: str = None, type: str = typer.Option(None, "--type"),
        limit: int = 100, json: bool = json_opt):
-    """List licenses/apps in an area (--zip / --city / --county)."""
+    """List licenses/apps in an area (--zip / --city / --county / --district)."""
     client = _client()
     if zip:
         rows = _clean(client.by_area(zip, "zip", status=status, license_type=type, limit=limit))
@@ -114,8 +114,10 @@ def by(zip: str = typer.Option(None, "--zip"), city: str = None, county: str = N
         rows = _clean(client.by_area(city, "city", status=status, license_type=type, limit=limit))
     elif county:
         rows = _clean(client.by_area(county, "county", status=status, license_type=type, limit=limit))
+    elif district:
+        rows = _clean(client.by_area(district, "district", status=status, license_type=type, limit=limit))
     else:
-        raise typer.BadParameter("provide one of --zip / --city / --county")
+        raise typer.BadParameter("provide one of --zip / --city / --county / --district")
     _out(rows, json, lambda: _table(rows, ["type", "type_desc", "file_number", "status", "name", "address", "expire"]))
 
 
@@ -148,6 +150,43 @@ def expiring(days: int = 90, zip: str = typer.Option(None, "--zip"), city: str =
         rows = _clean(client.expiring(days, county, "county", limit=limit))
     else:
         rows = _clean(client.expiring(days, limit=limit))
+    _out(rows, json, lambda: _table(rows, ["type", "type_desc", "file_number", "name", "address", "expire"]))
+
+
+@app.command()
+def address(fragment: str, mail: bool = typer.Option(False, "--mail", help="Also match mailing addresses (entity-level)"),
+            status: str = None, type: str = typer.Option(None, "--type"),
+            limit: int = 100, json: bool = json_opt):
+    """Identify every license/application tied to an address (street, number, city, or zip)."""
+    rows = _clean(_client().by_address(fragment, match_mail=mail, status=status,
+                                       license_type=type, limit=limit))
+    _out(rows, json, lambda: _table(rows, ["type", "type_desc", "file_number", "status", "name", "dba", "address", "expire"]))
+
+
+@app.command()
+def statuses(json: bool = json_opt):
+    """Full ABC status vocabulary (official glossary) + observed counts + overdue (auto-revocation candidates)."""
+    from . import statuses as st
+    data = st.status_overview(_client().con)
+    _out(data, json)
+
+
+@app.command()
+def overdue(min_days_past: int = typer.Option(0, "--min-days", help="Only licenses past expiry by at least N days"),
+            zip: str = typer.Option(None, "--zip"), city: str = None, county: str = None,
+            district: str = None, limit: int = 100, json: bool = json_opt):
+    """Still-ACTIVE licenses past their expiration date — renewal-failure / auto-revocation candidates."""
+    client = _client()
+    if zip:
+        rows = _clean(client.overdue(min_days_past, zip, "zip", limit=limit))
+    elif city:
+        rows = _clean(client.overdue(min_days_past, city, "city", limit=limit))
+    elif county:
+        rows = _clean(client.overdue(min_days_past, county, "county", limit=limit))
+    elif district:
+        rows = _clean(client.overdue(min_days_past, district, "district", limit=limit))
+    else:
+        rows = _clean(client.overdue(min_days_past, limit=limit))
     _out(rows, json, lambda: _table(rows, ["type", "type_desc", "file_number", "name", "address", "expire"]))
 
 
