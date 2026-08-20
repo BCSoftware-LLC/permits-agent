@@ -14,7 +14,7 @@ printingpress.dev) — not scraping live pages.
 | Layer | What | Status |
 |---|---|---|
 | **1. Data & compliance engine** | Daily-synced local mirror; status tracking, pending-application monitoring, expiration/renewal radar, news/advisories, forms index, fee info. MCP tools + CLI. | ✅ **Shipped (ABC reference adapter), verified live** |
-| **2. Document assembly** | Intake → auto-filled application packet (fillable PDFs at predictable URLs + cover sheets + fee estimate + per-type/district submission checklist). Owner signs; agent files. The $500–$2,000 consultant replacement. | ⏳ Next |
+| **2. Document assembly** | Intake → auto-filled application packet (fillable PDFs at predictable URLs + cover sheets + fee estimate + per-type/district submission checklist). Owner signs; agent files. The $500–$2,000 consultant replacement. | 🚧 In progress — requirements layer shipped (`abc-agent requirements`, 12 retail types × new/transfer/renewal, every entry sourced to abc.ca.gov) |
 | **3. Guided e-filing** | Browser automation against the authenticated portal (e.g. `abcbiz.abc.ca.gov`, CloudFront, no public API) under the customer's own account, human approval gates at submit/payment. | 🔒 Gated — needs legal review + product decisions |
 
 Layer 1 is also the **lead-gen radar**: every PEND application in a zip code

@@ -10,6 +10,7 @@ Usage:
     abc-agent stats
     abc-agent types [--code 47]
     abc-agent forms [--search "application"]
+    abc-agent requirements --type 47 [--action new|transfer|renewal]
     abc-agent news [--feed advisories]
     abc-agent serve                      # run the MCP server over stdio
 
@@ -226,6 +227,72 @@ def forms(search: str = None, json: bool = json_opt):
     """ABC forms library index (87 forms with PDF URLs)."""
     data = forms_mod.search_forms(search) if search else forms_mod.fetch_forms()
     _out(data, json, lambda: _table(data, ["number", "title", "revised", "url"]))
+
+
+@app.command()
+def requirements(type: str = typer.Option(..., "--type", help="License type code, e.g. 47"),
+                 action: str = typer.Option("new", "--action", help="new | transfer | renewal"),
+                 json: bool = json_opt):
+    """Required ABC forms + checklist for a license type and action.
+    Every requirement is traced to an official abc.ca.gov source; form numbers
+    are resolved against the local forms index (forms missing from the index
+    are flagged, never guessed)."""
+    import json as _json
+
+    from . import requirements as req
+
+    try:
+        entry = req.lookup(type, action)
+    except ValueError as e:
+        raise typer.BadParameter(str(e))
+
+    if entry is None:
+        msg = (f"License type {type} / action '{action}' is not yet mapped — "
+               f"verify requirements with ABC (mapped actions: "
+               f"{', '.join(req.mapped_actions(type)) or 'none'}).")
+        if json:
+            print(_json.dumps({"license_type": type, "action": action,
+                               "mapped": False, "message": msg}, indent=2))
+        else:
+            print(msg)
+        raise typer.Exit(0)
+
+    resolved = req.resolve(entry)
+
+    if json:
+        print(_json.dumps(resolved, indent=2, default=str))
+        return
+
+    print(f"Requirements for license type {resolved['license_type']} — {resolved['type_name']}")
+    print(f"Action: {resolved['action']}\n")
+
+    def _show_forms(label: str, forms: list[dict]) -> None:
+        if not forms:
+            return
+        print(f"{label}:")
+        for f in forms:
+            if f["in_index"]:
+                print(f"  {f['number']:<14} {f['title']} ({f['url']})")
+            else:
+                print(f"  {f['number']:<14} (required per ABC — NOT in local forms index, verify with ABC)")
+        print()
+
+    _show_forms("Required forms", resolved["forms"])
+    _show_forms("Conditional forms (entity/option-specific)", resolved["conditional_forms"])
+
+    if resolved["documents"]:
+        print("Required documents / attachments:")
+        for d in resolved["documents"]:
+            print(f"  - {d}")
+        print()
+
+    if resolved["notes"]:
+        print("Notes:")
+        for n in resolved["notes"]:
+            print(f"  - {n}")
+        print()
+
+    print(f"Source: {resolved['source']}")
 
 
 @app.command()

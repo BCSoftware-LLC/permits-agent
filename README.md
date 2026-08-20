@@ -41,6 +41,7 @@ abc-agent by --district 04       # licenses in an ABC district
 abc-agent by --county "SAN DIEGO" --type 21 --status SUREND --lic-or-app LIC --expires 2026
 abc-agent get 00677768
 abc-agent forms --search "transfer"
+abc-agent requirements --type 47 --action new   # forms + checklist for a filing
 abc-agent news --feed advisories
 abc-agent history-snapshot       # daily status snapshot (the history moat)
 abc-agent history-diff           # status transitions since last snapshot

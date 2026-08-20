@@ -24,7 +24,9 @@ mcp = FastMCP("abc-agent", instructions=(
     "Queries run against a daily-synced local mirror of ABC's official public "
     "license export (~129k records). Use search_licenses for names/DBAs, "
     "get_license for a file number, pending_applications to find new filings, "
-    "expiring_licenses for renewal radar, and license_stats for the big picture."
+    "expiring_licenses for renewal radar, and license_stats for the big picture. "
+    "Use license_requirements to get the forms/checklist ABC requires for a "
+    "license type ('new'/'transfer'/'renewal')."
 ))
 
 _client: db.ABCClient | None = None
@@ -169,6 +171,37 @@ def license_type_description(code: str) -> str:
 def search_forms(query: str) -> list[dict]:
     """Find ABC forms (e.g. 'application', 'transfer', 'ABC-211') with PDF URLs."""
     return forms_mod.search_forms(query)
+
+
+@mcp.tool()
+def license_requirements(license_type: str, action: str = "new") -> dict:
+    """Required ABC forms + documents for a license type code (e.g. '47') and
+    action ('new' original application | 'transfer' person-to-person |
+    'renewal' annual fee renewal). Every requirement traces to an official
+    abc.ca.gov source; each form number is resolved against the local forms
+    index — forms the index does not contain are flagged in_index=False (URLs
+    are never invented). Unmapped type/action combos return mapped=False with
+    an explicit 'verify with ABC' message."""
+    from . import requirements as req
+
+    try:
+        entry = req.lookup(license_type, action)
+    except ValueError as e:
+        return {"license_type": license_type, "action": action,
+                "mapped": False, "message": str(e)}
+
+    if entry is None:
+        return {
+            "license_type": str(license_type), "action": action,
+            "mapped": False,
+            "message": (f"License type {license_type} / action '{action}' is not yet "
+                        f"mapped — verify requirements with ABC (mapped actions: "
+                        f"{', '.join(req.mapped_actions(license_type)) or 'none'})."),
+        }
+
+    resolved = req.resolve(entry)
+    resolved["mapped"] = True
+    return resolved
 
 
 @mcp.tool()
