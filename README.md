@@ -63,6 +63,18 @@ mcp_servers:
     args: ["serve"]
 ```
 
+Hosted endpoint (the paid surface) — same tool set over HTTP with API-key
+auth and plan gating (`free` = public lookups, `pro` = everything):
+
+```bash
+ABC_API_KEYS="demo-free:free,demo-pro:pro" python -m abcgov.http_server
+# MCP url: http://localhost:8000/mcp   (header: Authorization: Bearer <key>)
+# health:  http://localhost:8000/healthz
+```
+
+See `docs/hosted-mcp.md` for auth, plans, deployment and known issues;
+`docs/payments/` for the Stripe/x402 monetization rails.
+
 ## Repo layout
 
 ```
