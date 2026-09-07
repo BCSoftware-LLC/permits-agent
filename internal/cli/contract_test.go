@@ -26,7 +26,7 @@ func TestAllDataCommandsAtBinaryBoundary(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	cases := [][]string{{"refresh"}, {"stats"}, {"address", "SELMA", "--status", "ACTIVE"}, {"get", "00677768"}, {"search", "EXAMPLE"}, {"area", "--city", "HOLLYWOOD"}, {"by", "--city", "HOLLYWOOD"}, {"pending"}, {"expiring", "--days", "0"}, {"overdue"}, {"statuses"}, {"types", "--offline"}, {"forms", "--offline"}, {"fees", "--offline"}, {"requirements", "47", "--action", "new", "--offline"}, {"news", "--feed", "all", "--offline"}, {"digest", "--watch", "00677768"}, {"history-snapshot"}, {"history-diff"}, {"history"}, {"doctor"}}
+	cases := [][]string{{"refresh"}, {"stats"}, {"address", "SELMA", "--status", "ACTIVE"}, {"get", "00677768"}, {"search", "EXAMPLE"}, {"area", "--city", "HOLLYWOOD"}, {"by", "--city", "HOLLYWOOD"}, {"pending"}, {"expiring", "--days", "0"}, {"overdue"}, {"statuses"}, {"types", "--offline"}, {"forms", "--offline"}, {"fees", "--offline"}, {"requirements", "47", "--action", "new", "--offline"}, {"requirements", "--type", "47", "--action", "new", "--offline"}, {"news", "--feed", "all", "--offline"}, {"digest", "--watch", "00677768"}, {"history-snapshot"}, {"history-diff"}, {"history"}, {"doctor"}}
 	for _, args := range cases {
 		t.Run(strings.Join(args, "_"), func(t *testing.T) {
 			out, errout, code := runCLI(t, bin, cache, append(args, "--json")...)

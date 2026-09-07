@@ -183,13 +183,24 @@ func newReferenceCmds() []*cobra.Command {
 	})
 	news.Flags().String("feed", "news", "news, advisories, or all")
 	news.Flags().Int("limit", 10, "Maximum items; 0 means all")
-	req := mk("requirements <code> [action]", cobra.RangeArgs(1, 2), func(cmd *cobra.Command, args []string) (any, error) {
+	req := mk("requirements [code] [action]", cobra.RangeArgs(0, 2), func(cmd *cobra.Command, args []string) (any, error) {
 		action, _ := cmd.Flags().GetString("action")
 		if len(args) == 2 {
 			action = args[1]
 		}
-		return reference.Requirements(cmd.Context(), args[0], action, offline)
+		code, _ := cmd.Flags().GetString("type")
+		if len(args) > 0 {
+			if code != "" {
+				return nil, usageError{fmt.Errorf("use either positional code or --type, not both")}
+			}
+			code = args[0]
+		}
+		if len(args) == 2 && cmd.Flags().Changed("action") {
+			return nil, usageError{fmt.Errorf("use either positional action or --action, not both")}
+		}
+		return reference.Requirements(cmd.Context(), code, action, offline)
 	})
 	req.Flags().String("action", "new", "new, transfer, or renewal")
+	req.Flags().String("type", "", "License type code (alternative to positional code)")
 	return []*cobra.Command{types, forms, fees, news, req}
 }

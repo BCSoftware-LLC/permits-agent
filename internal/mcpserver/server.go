@@ -2,10 +2,12 @@
 package mcpserver
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
-	"math"
+	"sort"
+	"strconv"
 	"time"
 
 	"github.com/BCSoftware-LLC/permits-agent/internal/abc"
@@ -238,6 +240,8 @@ func New() *server.MCPServer {
 	s.AddTool(
 		mcplib.NewTool("refresh_data",
 			mcplib.WithDescription("Download the official ABC daily export and atomically rebuild the local SQLite mirror"),
+			mcplib.WithBoolean("force", mcplib.Description("Force network refresh; default true")),
+			mcplib.WithReadOnlyHintAnnotation(false),
 			mcplib.WithDestructiveHintAnnotation(false),
 			mcplib.WithIdempotentHintAnnotation(true),
 			mcplib.WithOpenWorldHintAnnotation(true),
@@ -246,7 +250,11 @@ func New() *server.MCPServer {
 			if err := validateArgs(request); err != nil {
 				return mcplib.NewToolResultError(err.Error()), nil
 			}
-			store, info, err := abc.EnsureData(ctx, true)
+			force := true
+			if v, ok := request.GetArguments()["force"].(bool); ok {
+				force = v
+			}
+			store, info, err := abc.EnsureData(ctx, force)
 			if err != nil {
 				return mcplib.NewToolResultError(err.Error()), nil
 			}
@@ -260,7 +268,7 @@ func New() *server.MCPServer {
 	} {
 		name := spec.name
 		desc := spec.desc
-		s.AddTool(mcplib.NewTool(name, append([]mcplib.ToolOption{mcplib.WithDescription(desc), mcplib.WithString("code"), mcplib.WithString("license_type"), mcplib.WithString("action"), mcplib.WithString("query"), mcplib.WithString("search"), mcplib.WithString("feed"), mcplib.WithBoolean("offline"), mcplib.WithNumber("limit")}, readonly...)...), func(ctx context.Context, request mcplib.CallToolRequest) (*mcplib.CallToolResult, error) {
+		s.AddTool(referenceTool(name, desc), func(ctx context.Context, request mcplib.CallToolRequest) (*mcplib.CallToolResult, error) {
 			if err := validateArgs(request); err != nil {
 				return mcplib.NewToolResultError(err.Error()), nil
 			}
@@ -298,7 +306,7 @@ func New() *server.MCPServer {
 			return toolResultJSON(v)
 		})
 	}
-	s.AddTool(mcplib.NewTool("license_history", append([]mcplib.ToolOption{mcplib.WithDescription("ABC mirror history snapshot and diff")}, readonly...)...), withStore(func(ctx context.Context, store *abc.Store, args map[string]any) (any, error) {
+	s.AddTool(mcplib.NewTool("license_history", append(append([]mcplib.ToolOption{}, readonly...), mcplib.WithDescription("ABC mirror history snapshot and diff"), mcplib.WithReadOnlyHintAnnotation(false))...), withStore(func(ctx context.Context, store *abc.Store, args map[string]any) (any, error) {
 		snap, err := store.HistorySnapshot(ctx)
 		if err != nil {
 			return nil, err
@@ -376,7 +384,7 @@ var toolArgs = map[string]map[string]argKind{
 	"status_overview":      {}, "license_statuses": {}, "license_stats": {}, "license_history": {},
 	"licenses_in_area":         {"zip": kindString, "city": kindString, "county": kindString, "district": kindString, "status": kindString, "license_type": kindString, "lic_or_app": kindString, "expire_year": kindString, "limit": kindInt, "offset": kindInt},
 	"licenses_by_area":         {"zip": kindString, "city": kindString, "county": kindString, "district": kindString, "status": kindString, "license_type": kindString, "lic_or_app": kindString, "expire_year": kindString, "limit": kindInt, "offset": kindInt},
-	"license_type_description": {"code": kindString}, "license_types": {"code": kindString, "offline": kindBool},
+	"license_type_description": {"code": kindString, "offline": kindBool}, "license_types": {"code": kindString, "offline": kindBool},
 	"search_forms": {"query": kindString, "search": kindString, "offline": kindBool}, "abc_forms": {"search": kindString, "offline": kindBool},
 	"license_requirements": {"license_type": kindString, "code": kindString, "action": kindString, "offline": kindBool}, "abc_requirements": {"code": kindString, "action": kindString, "offline": kindBool},
 	"latest_news": {"feed": kindString, "limit": kindInt, "offline": kindBool}, "abc_news": {"feed": kindString, "limit": kindInt, "offline": kindBool},
@@ -389,8 +397,11 @@ func validateArgs(request mcplib.CallToolRequest) error {
 		return nil
 	}
 	raw, _ := request.GetRawArguments().(json.RawMessage)
-	if len(raw) == 0 || string(raw) == "null" {
+	if len(raw) == 0 {
 		return nil
+	}
+	if bytes.Equal(bytes.TrimSpace(raw), []byte("null")) {
+		return fmt.Errorf("arguments must be a JSON object")
 	}
 	var m map[string]json.RawMessage
 	if err := json.Unmarshal(raw, &m); err != nil {
@@ -400,6 +411,9 @@ func validateArgs(request mcplib.CallToolRequest) error {
 		kind, ok := allowed[k]
 		if !ok {
 			return fmt.Errorf("unknown argument %q", k)
+		}
+		if bytes.Equal(bytes.TrimSpace(v), []byte("null")) {
+			return fmt.Errorf("argument %q cannot be null", k)
 		}
 		switch kind {
 		case kindString:
@@ -413,16 +427,34 @@ func validateArgs(request mcplib.CallToolRequest) error {
 				return fmt.Errorf("argument %q must be a boolean", k)
 			}
 		case kindInt:
-			var n float64
-			if err := json.Unmarshal(v, &n); err != nil {
-				return fmt.Errorf("argument %q must be a number", k)
-			}
-			if n < 0 || math.Trunc(n) != n || n > float64(math.MaxInt) {
+			n, err := strconv.ParseInt(string(bytes.TrimSpace(v)), 10, 64)
+			if err != nil || n < 0 || n > 9007199254740991 {
 				return fmt.Errorf("argument %q must be a nonnegative integer", k)
 			}
 		}
 	}
 	return nil
+}
+
+// Use the same parameter definitions for advertised schemas and validation.
+func referenceTool(name, desc string) mcplib.Tool {
+	opts := []mcplib.ToolOption{mcplib.WithDescription(desc), mcplib.WithReadOnlyHintAnnotation(false), mcplib.WithOpenWorldHintAnnotation(true), mcplib.WithDestructiveHintAnnotation(false), mcplib.WithIdempotentHintAnnotation(true)}
+	keys := []string{}
+	for k := range toolArgs[name] {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	for _, k := range keys {
+		switch toolArgs[name][k] {
+		case kindString:
+			opts = append(opts, mcplib.WithString(k))
+		case kindBool:
+			opts = append(opts, mcplib.WithBoolean(k))
+		case kindInt:
+			opts = append(opts, mcplib.WithNumber(k))
+		}
+	}
+	return mcplib.NewTool(name, opts...)
 }
 
 func Serve() error { return server.ServeStdio(New()) }
