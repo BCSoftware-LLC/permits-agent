@@ -1,48 +1,20 @@
-# AGENTS.md — permits-agent repo conventions
+# Permits Agent engineering contract
 
-This file is the operating contract for AI agents (Hermes, Claude Code, Codex,
-etc.) working in this repository. Read it before making changes.
+Private BC Software native Go CLI/MCP. Read `docs/go-v1-contract.md`, `docs/architecture.md`, and `docs/data-sources.md`. No Python runtime; historical Python remains in Git history.
 
-## What this repo is
+## Boundaries
 
-Internal BC Software platform: agent-native access to government permitting /
-licensing data. The California ABC adapter (`abcgov/`) is the reference
-implementation and the only shipped adapter. Everything generalizes via the
-adapter pattern (see docs/architecture.md).
+- Official public ABC data only. No credentials, applicant data, government mutations, filings, payments, or external communications. Do not turn a stdio tool into a hosted production endpoint without separate approval.
+- Never fabricate records, legal requirements, counts, dates, or freshness. Curated requirements are dated guidance, not a complete filing package or legal determination.
+- File numbers are strings and not unique records; preserve all license/application/type rows. Parse ABC dates instead of lexicographic comparison.
+- Keep literal search text literal and compose filters with explicit grouping. Validate trust-boundary inputs; reject ambiguous selectors and invalid pagination.
+- Queries must work against the existing mirror without implicit network refresh. Surface source date/staleness; explicit refresh must preserve last good data on error. Local history survives refresh.
+- Protect secrets and cached records from Git, logs, and diagnostics. Tests use synthetic fixtures; live dogfood uses only public official sources and records aggregate evidence.
 
-## Non-negotiable rules
+## Work and verification
 
-1. **Public data only, on the official channel.** Fetch data from the sources
-   documented in docs/data-sources.md (daily CSV export, forms page, RSS).
-   Do NOT scrape the site aggressively, bypass CloudFront, or hammer endpoints.
-   The local mirror exists precisely so we never hammer anything.
-2. **Never fabricate data.** Every query result must trace to the local mirror
-   which traces to the daily export. If the export is stale or missing, say so.
-3. **No credentials in the repo.** Licensee portal credentials, API keys,
-   tokens never enter this repo, config, or commit history.
-4. **File numbers are not unique** — one file number can map to multiple rows
-   (one per license type). Never collapse them silently.
-5. **Dates are `DD-MON-YYYY`** in the export; parse with strptime before
-   comparisons, never lexicographic string compare.
-6. **Licensing/legal sensitivity**: ABC documents contain sworn statements and
-   the applicant must sign. Any feature touching actual filing carries human
-   approval gates. Flag regulatory questions, don't guess.
+Use tests first at approved seams: actual CLI invocation, MCP protocol, and public ingestion/history/query APIs. Prefer standard library and existing dependencies. Keep source ownership coherent; no speculative adapters.
 
-## Verification expectations
+Run `make check build audit`; run `make release` for macOS/Linux native artifacts. Dogfood each command and protocol surface with isolated cache state; verify missing cache, stale/offline reads, malformed sources, filters, multi-record identities, dates, and history. New CLI/MCP capabilities need tests and help/documentation. Do not call the release complete from unit tests alone.
 
-- After any change to `abcgov/`, run: `abc-agent refresh`, one search, one
-  area query, `abc-agent stats`, and `python tests/smoke_mcp.py` (exercises the
-  MCP server over stdio).
-- Commits must not include `__pycache__`, `.venv`, cache JSON, or the DuckDB
-  mirror (all gitignored).
-
-## Getting started
-
-```bash
-cd ~/bcsoftware/permits-agent
-source .venv/bin/activate
-pip install -e .
-abc-agent refresh
-```
-
-See README.md for the command surface.
+Before release: independent standards/security and specification review; exact Git tree/commit recorded; CI passes on that exact SHA; private repo and local/main/remote parity verified. Preserve inherited work, source provenance, and Python Git history. Do not delete original spike or old local caches without explicit authorization.
