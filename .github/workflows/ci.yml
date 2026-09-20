@@ -1,7 +1,7 @@
 name: Go verification
 on:
   push:
-    branches: [main, feat/go-production, feat/production-platform]
+    branches: [main, feat/go-production, feat/production-platform, feat/client-usage-analytics]
   pull_request:
   workflow_dispatch:
 permissions:

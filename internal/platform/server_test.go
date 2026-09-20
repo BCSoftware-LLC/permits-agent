@@ -22,7 +22,7 @@ func fixture(t *testing.T) (*App, *Store) {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { s.Close() })
-	a, err := New(Config{Origin: "http://localhost:8080", Store: s, Credentials: []Credential{{"tenant-a", TokenHash(tokenA), []string{"research", "cases:read", "cases:write"}, 1000, 0}, {"tenant-b", TokenHash(tokenB), []string{"research", "cases:read", "cases:write"}, 1000, 0}, {"tenant-read", TokenHash(tokenRead), []string{"research", "cases:read"}, 1000, 0}}})
+	a, err := New(Config{Origin: "http://localhost:8080", Store: s, Credentials: []Credential{{nil, "tenant-a", TokenHash(tokenA), []string{"research", "cases:read", "cases:write"}, 1000, 0}, {nil, "tenant-b", TokenHash(tokenB), []string{"research", "cases:read", "cases:write"}, 1000, 0}, {nil, "tenant-read", TokenHash(tokenRead), []string{"research", "cases:read"}, 1000, 0}}})
 	if err != nil {
 		t.Fatal(err)
 	}

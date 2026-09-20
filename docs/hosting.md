@@ -36,9 +36,13 @@ The output contains a one-time raw `access_key` and a `credential` object contai
   --keys /PRIVATE_PATH/permits-agent/keys.json
 ```
 
-A credential has `tenant`, `token_hash`, `scopes`, `monthly_request_limit`, and `monthly_model_call_limit` (default zero). Valid scopes are `research`, `cases:read`, `cases:write`, and `agent:read`. Use opaque tenant IDs. Keys for a tenant must share the same request and model-call limits. Permissions do not imply one another: read access must be granted explicitly. Customer IDs are always taken from the authenticated key; callers cannot choose another tenant.
+A credential has `tenant`, `token_hash`, `scopes`, `monthly_request_limit`, and `monthly_model_call_limit` (default zero). Valid scopes are `research`, `cases:read`, `cases:write`, `agent:read`, `analytics:read` (organization reports), and `analytics:all` (operator reports across organizations). Use opaque tenant IDs. Keys for a tenant must share the same request and model-call limits. Permissions do not imply one another: read access must be granted explicitly. Customer IDs are always taken from the authenticated key; callers cannot choose another tenant.
 
 Visit the local origin. The public fictional example requires no key. Connect a pilot key to create and reopen cases, append notes, download preparation briefs, and export review reminders. Browser keys live in memory and are cleared on reload/disconnect. Do not enter sensitive applicant information in this pilot.
+
+## Client usage analytics
+
+The hosted service records registered client identity, tool attempts and owner-assistant model usage. Provision separate credentials for Muse, other agent integrations and the website, following [usage analytics](usage-analytics.md). Open `/analytics.html` with an explicitly authorized analytics key. Local CLI/stdio usage and public page visits are not measured. The service cannot infer Muse identity from shared keys or recover historical attribution.
 
 ## Data refresh
 
