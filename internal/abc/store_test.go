@@ -2,6 +2,7 @@ package abc
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"os"
 	"path/filepath"
@@ -363,6 +364,124 @@ func TestHistorySeparatePreservesDuplicatesAndPayloadDiff(t *testing.T) {
 	}
 }
 
+func TestImportCSVFailedMirrorInstallDoesNotAppendHistorySnapshot(t *testing.T) {
+	dir := t.TempDir()
+	csvPath := filepath.Join(dir, "export.csv")
+	dbPath := filepath.Join(dir, "abc.sqlite")
+	if err := os.WriteFile(csvPath, []byte(testCSV), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Mkdir(dbPath, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dbPath, "block-rename"), []byte("x"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	_, err := ImportCSV(context.Background(), csvPath, dbPath)
+	if err == nil || !strings.Contains(err.Error(), "installing rebuilt mirror") {
+		t.Fatalf("ImportCSV error = %v, want mirror install failure", err)
+	}
+	if _, err := os.Stat(filepath.Join(dir, "history.sqlite")); !os.IsNotExist(err) {
+		t.Fatalf("failed mirror install appended history snapshot: %v", err)
+	}
+}
+
+func TestImportCSVRejectsMalformedHistoryBeforeMirrorInstall(t *testing.T) {
+	dir := t.TempDir()
+	csvPath := filepath.Join(dir, "export.csv")
+	dbPath := filepath.Join(dir, "abc.sqlite")
+	histPath := filepath.Join(dir, "history.sqlite")
+	if err := os.WriteFile(csvPath, []byte(testCSV), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := ImportCSV(context.Background(), csvPath, dbPath); err != nil {
+		t.Fatal(err)
+	}
+	badHistory := []byte("not sqlite history")
+	if err := os.WriteFile(histPath, badHistory, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	newer := strings.Replace(testCSV, "Updated Tuesday 25th of August 2026", "Updated Wednesday 26th of August 2026", 1)
+	if err := os.WriteFile(csvPath, []byte(newer), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	_, err := ImportCSV(context.Background(), csvPath, dbPath)
+	if err == nil || !strings.Contains(err.Error(), "validating history database before mirror install") {
+		t.Fatalf("ImportCSV error = %v, want malformed history validation failure", err)
+	}
+	gotHistory, err := os.ReadFile(histPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(gotHistory) != string(badHistory) {
+		t.Fatalf("malformed history bytes changed: %q", gotHistory)
+	}
+	store, err := Open(dbPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.Close()
+	exportDate, err := store.ExportDate(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if exportDate.Format("2006-01-02") != "2026-08-25" {
+		t.Fatalf("malformed history failure installed new mirror date %s", exportDate.Format("2006-01-02"))
+	}
+	if _, err := store.HistoryDiff(context.Background()); err == nil {
+		t.Fatal("HistoryDiff succeeded against malformed history")
+	}
+}
+
+func TestHistorySnapshotFailureAfterInstallIsExplicitPartialSuccess(t *testing.T) {
+	dir := t.TempDir()
+	csvPath := filepath.Join(dir, "export.csv")
+	dbPath := filepath.Join(dir, "abc.sqlite")
+	if err := os.WriteFile(csvPath, []byte(testCSV), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := ImportCSV(context.Background(), csvPath, dbPath); err != nil {
+		t.Fatal(err)
+	}
+	histPath := filepath.Join(dir, "history.sqlite")
+	hist, err := sql.Open("sqlite", histPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := hist.Exec(`DROP TABLE history_snapshots; CREATE TABLE history_snapshots (export_date TEXT NOT NULL, seq INTEGER NOT NULL, PRIMARY KEY(export_date, seq)); INSERT INTO history_snapshots(export_date, seq) VALUES ('2026-08-25', 0);`); err != nil {
+		t.Fatal(err)
+	}
+	if err := hist.Close(); err != nil {
+		t.Fatal(err)
+	}
+	newer := strings.Replace(testCSV, "Updated Tuesday 25th of August 2026", "Updated Wednesday 26th of August 2026", 1)
+	if err := os.WriteFile(csvPath, []byte(newer), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	result, err := ImportCSV(context.Background(), csvPath, dbPath)
+	if err == nil || !strings.Contains(err.Error(), "mirror installed, history snapshot failed; run history-snapshot") {
+		t.Fatalf("ImportCSV error = %v, want explicit partial success", err)
+	}
+	if result.Database != dbPath || result.ExportDate.Format("2006-01-02") != "2026-08-26" || result.Records == 0 {
+		t.Fatalf("partial success result does not describe installed mirror: %+v", result)
+	}
+	store, err := Open(dbPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.Close()
+	exportDate, err := store.ExportDate(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if exportDate.Format("2006-01-02") != "2026-08-26" {
+		t.Fatalf("partial success did not install mirror date %s", exportDate.Format("2006-01-02"))
+	}
+}
+
 func TestEnsureDataUsesExportDateForStaleSource(t *testing.T) {
 	dir := t.TempDir()
 	t.Setenv("ABC_AGENT_CACHE", dir)
@@ -399,5 +518,47 @@ func TestEnsureDataUsesExportDateForStaleSource(t *testing.T) {
 	}
 	if exportDate.Format("2006-01-02") != "2026-08-25" {
 		t.Fatalf("db regressed to stale source: %s", exportDate.Format("2006-01-02"))
+	}
+}
+
+func TestRejectedDownloadPreservesCSVAndAllowsNonForceRetry(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("ABC_AGENT_CACHE", dir)
+	csv := filepath.Join(dir, "ABC-DailyDataExport.csv")
+	db := filepath.Join(dir, "abc.sqlite")
+	if err := os.WriteFile(csv, []byte(testCSV), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := ImportCSV(context.Background(), csv, db); err != nil {
+		t.Fatal(err)
+	}
+	old := time.Now().Add(-24 * time.Hour)
+	if err := os.Chtimes(csv, old, old); err != nil {
+		t.Fatal(err)
+	}
+	bad := strings.Replace(testCSV, "License Type", "INVALID", 1)
+	_, _, err := ensureData(context.Background(), true, func(_ context.Context, dst string) error { return os.WriteFile(dst, []byte(bad), 0600) })
+	if err == nil {
+		t.Fatal("malformed download accepted")
+	}
+	preserved, err := os.ReadFile(csv)
+	if err != nil || string(preserved) != testCSV {
+		t.Fatal("last good CSV replaced")
+	}
+	downloaded := false
+	s, _, err := ensureData(context.Background(), false, func(_ context.Context, dst string) error {
+		downloaded = true
+		return os.WriteFile(dst, []byte(testCSV), 0600)
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+	if !downloaded {
+		t.Fatal("non-force retry was poisoned by rejected download")
+	}
+	stats, err := s.Stats(context.Background())
+	if err != nil || stats.TotalRecords != 4 {
+		t.Fatalf("mirror: %+v, %v", stats, err)
 	}
 }

@@ -1,10 +1,10 @@
 # Permits Agent engineering contract
 
-Private BC Software native Go CLI/MCP. Read `docs/go-v1-contract.md`, `docs/architecture.md`, and `docs/data-sources.md`. No Python runtime; historical Python remains in Git history.
+Public BC Software Permits Agent product. Permits N More is its first customer, not the product brand. Read `docs/go-v1-contract.md`, `docs/architecture.md`, and `docs/data-sources.md`. The September 2026 owner instruction authorizes a hosted website, agent connector, and California-wide preparation platform; the older private/local-only contract describes the original CLI release. No Python runtime; historical Python remains in Git history.
 
 ## Boundaries
 
-- Official public ABC data only. No credentials, applicant data, government mutations, filings, payments, or external communications. Do not turn a stdio tool into a hosted production endpoint without separate approval.
+- Public source code must contain no credentials or customer data. Hosted cases must be tenant isolated. Official-source discovery and draft preparation are authorized; actual government submissions, signatures, payments, and external communications require specific customer authority. Never imply unimplemented filing coverage or automatic legal determinations.
 - Never fabricate records, legal requirements, counts, dates, or freshness. Curated requirements are dated guidance, not a complete filing package or legal determination.
 - File numbers are strings and not unique records; preserve all license/application/type rows. Parse ABC dates instead of lexicographic comparison.
 - Keep literal search text literal and compose filters with explicit grouping. Validate trust-boundary inputs; reject ambiguous selectors and invalid pagination.
@@ -17,4 +17,4 @@ Use tests first at approved seams: actual CLI invocation, MCP protocol, and publ
 
 Run `make check build audit`; run `make release` for macOS/Linux native artifacts. Dogfood each command and protocol surface with isolated cache state; verify missing cache, stale/offline reads, malformed sources, filters, multi-record identities, dates, and history. New CLI/MCP capabilities need tests and help/documentation. Do not call the release complete from unit tests alone.
 
-Before release: independent standards/security and specification review; exact Git tree/commit recorded; CI passes on that exact SHA; private repo and local/main/remote parity verified. Preserve inherited work, source provenance, and Python Git history. Do not delete original spike or old local caches without explicit authorization.
+Before release: independent standards/security and specification review; exact Git tree/commit recorded; CI passes on that exact SHA; intended public visibility and remote parity verified. Preserve inherited work, source provenance, and Python Git history. Do not delete original spike or old local caches without explicit authorization.

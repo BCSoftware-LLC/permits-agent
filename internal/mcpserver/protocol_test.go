@@ -115,6 +115,22 @@ func TestStdioMCPProtocolSurfaceToolsResourcesAndValidation(t *testing.T) {
 		}
 	}
 
+	// Every record result is self-contained even when the mirror is stale or empty.
+	for _, query := range []string{"OWNER", "NO-MATCH-UNLIKELY"} {
+		r := c.request(t, "tools/call", map[string]any{"name": "search_licenses", "arguments": map[string]any{"query": query}})
+		structured := asMap(t, r["structuredContent"])
+		p := asMap(t, structured["provenance"])
+		if p["source_url"] != abc.ExportURL || p["export_date"] == "" || p["stale"] != true {
+			t.Fatalf("missing stale source evidence: %#v", p)
+		}
+		mustHave(t, structured, "data")
+	}
+	// Legacy single-type tool must not silently return the whole reference.
+	assertToolError(t, c, "license_type_description", map[string]any{"offline": true})
+	required := asSlice(t, asMap(t, toolByName["license_type_description"]["inputSchema"])["required"])
+	if !reflect.DeepEqual(required, []any{"code"}) {
+		t.Errorf("required schema=%v", required)
+	}
 	// Explicit data semantics: multi-row get, filters, zero limit, and offset.
 	if res := c.request(t, "tools/call", map[string]any{"name": "license_type_description", "arguments": map[string]any{"code": "47", "offline": true}}); res["isError"] == true {
 		t.Errorf("license_type_description rejects schema-declared offline arg: %#v", res)
@@ -271,6 +287,13 @@ func callToolJSON(t *testing.T, c *protocolClient, name string, args any, wantEr
 		t.Fatalf("%s content len=%d", name, len(content))
 	}
 	text, _ := asMap(t, content[0])["text"].(string)
+	if !wantErr && name == "license_type_description" {
+		if text != "On-Sale General - Eating Place" {
+			t.Fatalf("legacy description changed: %q", text)
+		}
+		mustHave(t, asMap(t, res["_meta"]), "provenance")
+		return text
+	}
 	if !wantErr && !json.Valid([]byte(text)) {
 		t.Fatalf("%s returned non-json text: %q", name, text)
 	}

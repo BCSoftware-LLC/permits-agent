@@ -1,0 +1,11 @@
+.git
+.env*
+.venv
+bin
+dist
+dogfood-output
+*.sqlite*
+*.csv
+*.zip
+*.download
+*.tmp

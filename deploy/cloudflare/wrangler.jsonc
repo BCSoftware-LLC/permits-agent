@@ -1,0 +1,9 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "permits-agent-edge",
+  "main": "worker.mjs",
+  "compatibility_date": "2026-09-19",
+  "workers_dev": false,
+  "observability": {"enabled": false},
+  "vars": {"ORIGIN_URL": "https://REPLACE_WITH_DURABLE_ORIGIN"}
+}

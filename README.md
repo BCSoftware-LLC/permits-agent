@@ -1,10 +1,28 @@
 # Permits Agent
 
-Private BC Software **native Go CLI and stdio MCP server** for California ABC public data. No Python runtime, database service, credentials, or account required. California ABC is connector one for the broader permits platform; this release is the public-data gateway, not filing or legal-compliance automation.
+**Permits Agent** is BC Software’s public business-permitting product, with **Permits N More as its first customer**. This branch adds a preparation website, tenant-scoped cases, a hosted MCP/API connector, official-source retrieval and an optional owner assistant to the native California ABC data engine.
+
+**Status: synthetic-data preparation pilot candidate, not a completed production filing service.** It prepares research checklists and review briefs. It does not fill official government forms, determine complete legal requirements, file, sign, pay fees, send correspondence or book appointments. California-wide intake does not mean verified statewide permit coverage.
+
+Start with the [current public handoff](HANDOFF.md), [hosting guide](docs/hosting.md), [commercial readiness and remaining work](docs/commercial-readiness.md), and [verification evidence](docs/verification.md).
+
+## Website, hosted agent connector and owner assistant
+
+`make build` produces `bin/permits-agent-server` alongside the existing native binaries. The server embeds the website and serves `/mcp` (stateless Streamable HTTP), `/api/call`, `/api/usage`, and an optional `/api/agent`. Customer access uses operator-provisioned bearer keys with explicit scopes and quotas. No raw key is stored in the case database or browser storage.
+
+The ten shared platform tools discover/read curated official sources, plan research, create/list/read/update tenant cases, append notes, export draft briefs, and generate review reminders. `tools/list` describes typed inputs. Case listings are bounded/paginated; updates check the current version. Remote callers cannot refresh ABC or mutate shared ABC history.
+
+The optional owner assistant uses a configured Responses model and seven bounded, read-only research tools. It shares only the selected case context and reserves tenant model allowance before each call. Model credentials, model selection and allowance are all opt-in; the application works as a connector and preparation workspace without them.
+
+See [hosting](docs/hosting.md) for private credential configuration, source refresh, Cloudflare edge/Gateway setup and operational launch gates. The optional Worker and Dockerfile are deployment artifacts, not evidence of a live deployment. Customer billing is not enabled.
+
+## Native public-data tools
+
+The original CLI and stdio MCP remain available without accounts, provider credentials or Python. Hosted customer cases require separate configuration. Existing Python installations are not automatically changed.
 
 ## Build and install
 
-Requires the Go version in `go.mod` or newer. From a private checkout:
+Requires the Go version in `go.mod` or newer. From a checkout (Go required; Node 22+ is used for website/proxy tests):
 
 ```sh
 go mod download
@@ -13,7 +31,7 @@ make build
 ./bin/abc-agent --help
 ```
 
-`bin/abc-agent` and `bin/abc-agent-mcp` are self-contained native binaries. Copy them to a directory on your PATH. `make release` builds macOS/Linux arm64/amd64 variants and `dist/SHA256SUMS`; GitHub Actions retains the same private binary artifacts for each passing source SHA. Do not use the old Python `.venv/bin/abc-agent`.
+`bin/abc-agent` and `bin/abc-agent-mcp` are self-contained native binaries. Copy them to a directory on your PATH. `make release` builds macOS/Linux arm64/amd64 variants and `dist/SHA256SUMS`; GitHub Actions retains the same binary artifacts for each passing source SHA. An existing Python integration requires an explicit, tested cutover; this build does not reconfigure it.
 
 ```sh
 mkdir -p "$HOME/.local/bin"
@@ -55,14 +73,14 @@ abc-agent history-diff --json
 abc-agent doctor --json
 ```
 
-Reference responses carry provenance and explicit stale/offline metadata. `--offline` means no network request. Current official page/feed coverage is not a complete historical archive. Requirements are **dated curated guidance** for supported type/action pairs, not legally complete filing packages; unsupported mappings fail explicitly. Fees are public reference material, not a price quote or a calculator. Digest news failures must be visible, never silently presented as no news.
+Reference responses carry provenance and explicit stale/offline metadata. `--offline` means no network request. Current official page/feed coverage is not a complete historical archive. Requirements are **dated curated guidance** for supported type/action pairs, not legally complete filing packages; unsupported mappings fail explicitly. Fees are public reference material, not a price quote or a calculator. Digest news failures are explicit warnings with null news, never an empty-success news claim. `digest --zips 90028,94103 --counties "LOS ANGELES,SAN FRANCISCO"` restores multi-area workflows; `--watch` accepts comma-separated exact file numbers. Totals are computed before pagination.
 
 History snapshots represent exports actually loaded, one per export date. Refreshing the same date is idempotent. A meaningful diff requires distinct dated snapshots; a one-snapshot result is not evidence that statewide records did not change. History is local, independent of the replaceable license mirror, and survives refresh.
 
 ## Output and input contract
 
 - Default data output is formatted JSON; `--json` explicitly selects the same machine-readable format. Diagnostics go to stderr. Help/version are text unless their documented JSON flag is used.
-- Record results are arrays, including `[]` for no matches. `--limit 0` returns all; positive limit and `--offset` select a deterministic page. A page size is not a total matching count.
+- Native CLI record results are arrays, including `[]` for no matches. MCP preserves legacy text shapes and adds structured provenance for mirror results, including empty searches. `--limit 0` returns all; positive limit and `--offset` select a deterministic page. A page size is not a total matching count.
 - File numbers must be **exactly eight digits**, including leading zeros. `get` returns every matching license/application/type row; a file number is not a unique record.
 - Type codes are exactly two digits. Use `statuses` for recognized official codes. Unknown future source codes are preserved in statistics rather than translated into invented meanings.
 - Search/address fragments are literal case-insensitive text, not SQL patterns. Area flags select one premises area using prefix matching; conflicting selectors fail. This is not address standardization or parcel identity verification.
@@ -85,7 +103,7 @@ Run `abc-agent-mcp`, `abc-agent serve`, or `abc-agent mcp` as a subprocess. All 
 }
 ```
 
-The host discovers schemas with `tools/list` and resources with `resources/list`; mirror reads and reference calls use the same Go domain code as the CLI. `refresh_data` explicitly downloads public data and changes the local cache, never government records. Local history writes are declared as such. No hosted HTTP listener, API-key service, tenant isolation or production deployment is provided. The old hosted Python prototype is retired, not silently ported.
+The host discovers schemas with `tools/list` and resources with `resources/list`; mirror reads and reference calls use the same Go domain code as the CLI. `refresh_data` explicitly downloads public data and changes the local cache, never government records. Local history writes are declared as such. The native subprocess retains local semantics. The separate hosted server provides scoped bearer access and tenant cases; see the hosted section above. The old Python HTTP prototype was not silently ported.
 
 ## Verification and operations
 
@@ -100,4 +118,4 @@ Back up the local cache/history before operating on it. Failed refresh must pres
 
 ## Migration and license
 
-The handwritten Python baseline is preserved at Git commit `075cd473330fc51e95a507e628bb6dea89f82179`; it was not Printing Press output. Its known filter defect is not carried into Go. Source lineage and third-party licenses are in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md). BC Software code remains proprietary/internal under [LICENSE](LICENSE). Keep the repository private; public release, payments, protected applicant data, filing and hosted services require separate authorization.
+The handwritten Python baseline is preserved at Git commit `075cd473330fc51e95a507e628bb6dea89f82179`; it was not Printing Press output. Its known filter defect is not carried into Go. Source lineage and third-party licenses are in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md). BC Software code remains subject to [LICENSE](LICENSE); public visibility does not imply an open-source license. The owner intentionally made this repository public for collaborating agents. Keep credentials, caches and customer records out of Git. Actual filing, payment and communication require specific customer authority.

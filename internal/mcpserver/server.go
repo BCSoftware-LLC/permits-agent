@@ -278,6 +278,9 @@ func New() *server.MCPServer {
 			var err error
 			switch name {
 			case "license_types", "license_type_description":
+				if name == "license_type_description" && stringArg(args, "code") == "" {
+					return mcplib.NewToolResultError("code is required"), nil
+				}
 				v, err = reference.Types(ctx, stringArg(args, "code"), off)
 			case "abc_forms":
 				v, err = reference.Forms(ctx, stringArg(args, "search"), off)
@@ -303,7 +306,7 @@ func New() *server.MCPServer {
 			if err != nil {
 				return mcplib.NewToolResultError(err.Error()), nil
 			}
-			return toolResultJSON(v)
+			return referenceResult(name, v)
 		})
 	}
 	s.AddTool(mcplib.NewTool("license_history", append(append([]mcplib.ToolOption{}, readonly...), mcplib.WithDescription("ABC mirror history snapshot and diff"), mcplib.WithReadOnlyHintAnnotation(false))...), withStore(func(ctx context.Context, store *abc.Store, args map[string]any) (any, error) {
@@ -334,8 +337,50 @@ func withStore(fn func(context.Context, *abc.Store, map[string]any) (any, error)
 		if err != nil {
 			return mcplib.NewToolResultError(err.Error()), nil
 		}
+		result, err := toolResultJSON(value)
+		if err == nil {
+			attachProvenance(result, value, store.Provenance(ctx))
+		}
+		return result, err
+	}
+}
+
+func attachProvenance(result *mcplib.CallToolResult, value any, provenance any) {
+	result.Meta = &mcplib.Meta{AdditionalFields: map[string]any{"provenance": provenance}}
+	result.StructuredContent = map[string]any{"data": value, "provenance": provenance}
+}
+
+func referenceResult(name string, value any) (*mcplib.CallToolResult, error) {
+	var payload, provenance any
+	switch name {
+	case "license_type_description":
+		r := value.(reference.TypesResult)
+		if len(r.Types) != 1 {
+			return mcplib.NewToolResultError("license type not found"), nil
+		}
+		result := mcplib.NewToolResultText(r.Types[0].Description)
+		attachProvenance(result, r.Types[0].Description, r.Provenance)
+		return result, nil
+	case "search_forms":
+		r := value.(reference.FormsResult)
+		payload = r.Forms
+		provenance = r.Provenance
+	case "latest_news":
+		r := value.(reference.NewsResult)
+		payload = r.Items
+		provenance = r.Provenance
+	case "fee_surcharges":
+		r := value.(reference.FeesResult)
+		payload = r.Surcharges
+		provenance = r.Provenance
+	default:
 		return toolResultJSON(value)
 	}
+	result, err := toolResultJSON(payload)
+	if err == nil {
+		attachProvenance(result, payload, provenance)
+	}
+	return result, err
 }
 
 func toolResultJSON(value any) (*mcplib.CallToolResult, error) {
@@ -398,7 +443,14 @@ func validateArgs(request mcplib.CallToolRequest) error {
 	}
 	raw, _ := request.GetRawArguments().(json.RawMessage)
 	if len(raw) == 0 {
-		return nil
+		if request.Params.Arguments == nil {
+			return nil
+		}
+		var err error
+		raw, err = json.Marshal(request.Params.Arguments)
+		if err != nil {
+			return fmt.Errorf("arguments must be a JSON object")
+		}
 	}
 	if bytes.Equal(bytes.TrimSpace(raw), []byte("null")) {
 		return fmt.Errorf("arguments must be a JSON object")
@@ -447,7 +499,11 @@ func referenceTool(name, desc string) mcplib.Tool {
 	for _, k := range keys {
 		switch toolArgs[name][k] {
 		case kindString:
-			opts = append(opts, mcplib.WithString(k))
+			if name == "license_type_description" && k == "code" {
+				opts = append(opts, mcplib.WithString(k, mcplib.Required()))
+			} else {
+				opts = append(opts, mcplib.WithString(k))
+			}
 		case kindBool:
 			opts = append(opts, mcplib.WithBoolean(k))
 		case kindInt:

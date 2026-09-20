@@ -36,6 +36,33 @@ func TestAllDataCommandsAtBinaryBoundary(t *testing.T) {
 		})
 	}
 }
+func TestLegacyDigestAreas(t *testing.T) {
+	bin, cache := buildCLI(t)
+	out, errout, code := runCLI(t, bin, cache, "digest", "--zips", "90028,90069", "--counties", "LOS ANGELES", "--limit", "1", "--json")
+	if code != 0 {
+		t.Fatalf("%d %s", code, errout)
+	}
+	var result struct {
+		Brief string
+		Areas []struct {
+			Kind         string
+			Value        string
+			PendingCount int `json:"pending_count"`
+			Pending      []json.RawMessage
+		}
+	}
+	if err := json.Unmarshal([]byte(out), &result); err != nil {
+		t.Fatal(err)
+	}
+	// The fixture has one PEND record in 90028; total must reflect it.
+	if result.Brief == "" || len(result.Areas) != 3 {
+		t.Fatalf("result=%s", out)
+	}
+	if result.Areas[0].Value != "90028" || result.Areas[0].PendingCount != 1 {
+		t.Fatalf("first area=%+v", result.Areas[0])
+	}
+}
+
 func TestStaleMirrorWarnsWithoutPollutingJSON(t *testing.T) {
 	bin, cache := buildCLI(t)
 	out, errout, code := runCLI(t, bin, cache, "stats", "--json")

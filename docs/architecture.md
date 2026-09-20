@@ -1,5 +1,11 @@
 # Architecture
 
+## ADR-002: public Permits Agent preparation platform
+
+The owner authorized a public product with Permits N More as its first customer. The hosted platform adds tenant cases, shared MCP/API tools, embedded website, request accounting and an opt-in read-only owner assistant around the native domain packages. It is a preparation pilot candidate, not a completed filing system. See [hosting](hosting.md), [commercial readiness](commercial-readiness.md), and [verification](verification.md). No existing client website or Python runtime was cut over.
+
+The original decision below describes the native release, not current repository visibility or the newly authorized hosted scope.
+
 ## ADR-001: native Go, local public-data mirror
 
 **Decision:** ship one native Go public-data CLI and stdio MCP server. Go supersedes Python as the delivery target. The private repository remains `BCSoftware-LLC/permits-agent`; the handwritten Python baseline survives in Git at `075cd473330fc51e95a507e628bb6dea89f82179`. The initial Go scaffold came from cli-printing-press 4.31.1; see [notices](../THIRD_PARTY_NOTICES.md). No generated code is presumed verified.
