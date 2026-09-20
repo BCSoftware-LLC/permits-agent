@@ -1,0 +1,200 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Connect your agent — Permits Agent</title>
+    <link rel="stylesheet" href="/style.css" />
+  </head>
+  <body>
+    <header>
+      <a href="/" class="brand">Permits Agent ↗</a
+      ><a class="button small" href="/#workspace">Open workspace</a>
+    </header>
+    <main class="document">
+      <p class="eyebrow">FOR AGENT BUILDERS</p>
+      <h1>Bring your agent.<br />Keep the context.</h1>
+      <p>
+        Permits Agent exposes the same preparation cases through its website,
+        JSON API, and Streamable HTTP MCP endpoint. Access is currently
+        provisioned by the operator for pilot customers.
+      </p>
+      <h2>Connect over MCP</h2>
+      <p>
+        Use your deployment’s <code>/mcp</code> endpoint with an
+        <code>Authorization: Bearer YOUR_ACCESS_KEY</code> header. Choose a
+        client that supports headers on Streamable HTTP. OAuth login and
+        automatic connector-store installation are not implemented.
+      </p>
+      <pre>
+{
+  "mcpServers": {
+    "permits-agent": {
+      "url": "https://YOUR_DOMAIN/mcp",
+      "headers": {"Authorization": "Bearer YOUR_ACCESS_KEY"}
+    }
+  }
+}</pre
+      >
+      <p>
+        Configuration syntax varies by agent client. Never place a real key in a
+        public repository. Rotate keys through the operator. Product capability
+        discovery is available at
+        <a href="/.well-known/permits-agent.json"
+          >/.well-known/permits-agent.json</a
+        >.
+      </p>
+      <h2>One case, two ways to work</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>Tool</th>
+            <th>Purpose</th>
+            <th>Scope</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>source_catalog / source_read</td>
+            <td>
+              Find and retrieve curated official entry points with freshness and
+              fingerprints
+            </td>
+            <td>research</td>
+          </tr>
+          <tr>
+            <td>plan_business</td>
+            <td>Build a research checklist from California intake</td>
+            <td>research</td>
+          </tr>
+          <tr>
+            <td>case_create</td>
+            <td>Save intake with an idempotent request key</td>
+            <td>cases:write</td>
+          </tr>
+          <tr>
+            <td>case_update_intake</td>
+            <td>
+              Update premises and activities at the current version, then
+              rebuild the checklist
+            </td>
+            <td>cases:write</td>
+          </tr>
+          <tr>
+            <td>case_list / case_get</td>
+            <td>
+              Read paginated case summaries (limit 1–100, offset) or an
+              individual case
+            </td>
+            <td>cases:read</td>
+          </tr>
+          <tr>
+            <td>case_add_note</td>
+            <td>
+              Record an owner answer or research evidence at a specified case
+              version
+            </td>
+            <td>cases:write</td>
+          </tr>
+          <tr>
+            <td>case_export</td>
+            <td>Download a draft preparation worksheet and correspondence</td>
+            <td>cases:read</td>
+          </tr>
+          <tr>
+            <td>case_reminder</td>
+            <td>Generate an owner-selected review reminder</td>
+            <td>cases:read</td>
+          </tr>
+        </tbody>
+      </table>
+      <p>
+        Read-only ABC tools are also available with the research scope. Hosted
+        queries use operator-refreshed caches, have a maximum page size of 200,
+        and do not permit callers to refresh the shared data.
+      </p>
+      <h2>Call the JSON API</h2>
+      <pre>
+POST /api/call
+Authorization: Bearer YOUR_ACCESS_KEY
+Content-Type: application/json
+
+{
+  "name": "plan_business",
+  "arguments": {
+    "intake": {
+      "business_name": "Example Café",
+      "business_type": "Restaurant",
+      "address": "",
+      "city": "Los Angeles",
+      "county": "Los Angeles",
+      "jurisdiction": "unknown",
+      "activities": ["food", "alcohol_retail", "employees"]
+    }
+  }
+}</pre
+      >
+      <p>
+        Results use the MCP tool result format: <code>content</code>, optional
+        <code>structuredContent</code>, and <code>isError</code>. Check tool
+        errors even when a protocol response succeeds. Preserve source freshness
+        and uncertainty when explaining results to a customer.
+      </p>
+      <h2 id="coverage">What this version can do</h2>
+      <ul>
+        <li>
+          Read official ABC license data and cached references with source
+          provenance.
+        </li>
+        <li>
+          Prepare a California research checklist, including local jurisdiction,
+          business registration, ABC and TTB investigation paths.
+        </li>
+        <li>
+          Keep separate customer cases, record user-supplied notes, and generate
+          draft briefs and review reminders.
+        </li>
+        <li>
+          Attribute authenticated requests to the credential’s tenant and
+          enforce request allowances.
+        </li>
+      </ul>
+      <h2>What remains outside this version</h2>
+      <p>
+        This version does not automatically fill official PDFs, determine
+        complete permit obligations, submit forms, sign, pay fees, send
+        correspondence, book agency appointments, or execute autonomous filings.
+        An external agent can use the tools to assist with preparation. The
+        optional owner assistant uses a configured Responses model and bounded
+        read-only ABC and official-source research tools; it requires explicit
+        model credentials, an agent:read scope, and a tenant model-call
+        allowance. It cannot write cases or take external actions. Its text
+        cannot approve a filing or promote user-supplied notes to verified
+        agency facts.
+      </p>
+      <p>
+        Local coverage is a research workflow, not a verified directory of every
+        California city and county. CalGold itself warns that its information
+        may be incomplete. CUP requirements depend on premises and use; the
+        product does not infer that every alcohol business requires a CUP.
+      </p>
+      <h2>Usage and commercial availability</h2>
+      <p>
+        Each authenticated HTTP request, including errors and protocol calls,
+        consumes one request allowance. Limits are shared across a tenant’s
+        keys: 60 requests per rolling minute and the configured monthly quota.
+        Usage events are operational accounting, not invoices. Customer billing,
+        checkout, plan prices, and paid service terms are not active.
+      </p>
+      <p>
+        <a href="https://github.com/BCSoftware-LLC/permits-agent"
+          >Read the source and operator documentation ↗</a
+        >
+      </p>
+    </main>
+    <footer>
+      <a href="/">← Permits Agent</a
+      ><a href="/privacy.html">Pilot privacy & data</a>
+    </footer>
+  </body>
+</html>

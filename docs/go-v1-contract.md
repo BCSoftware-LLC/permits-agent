@@ -1,5 +1,7 @@
 # Native Go v0.1 release contract
 
+> Historical scope. The September 2026 owner instruction supersedes private/local-only boundaries for the new public product; see [commercial readiness](commercial-readiness.md) and [hosting](hosting.md). The compatibility and correctness requirements below still apply to the native CLI.
+
 Approved scope: finish the existing public-data CLI/MCP feature set in Go; no Python runtime. Blake confirmed tests at CLI invocation, MCP protocol, and public ingestion/history API boundaries. Keep private; no government writes, payments, applicant data, external communications, or hosted deployment. Existing Python is behavioral reference only, not code to harden. Base: 075cd473330fc51e95a507e628bb6dea89f82179.
 
 ## Runtime contract

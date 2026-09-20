@@ -89,66 +89,6 @@ func newHistoryCmds() []*cobra.Command {
 	return []*cobra.Command{snapshot, diff, alias}
 }
 
-func newDigestCmd() *cobra.Command {
-	var a abc.AreaFilter
-	watch := ""
-	days := 30
-	c := &cobra.Command{Use: "digest", Short: "Deterministic public-data digest", Args: exact(0), RunE: func(cmd *cobra.Command, args []string) error {
-		s, err := openStore()
-		if err != nil {
-			return err
-		}
-		defer s.Close()
-		all := a
-		all.Limit = 0
-		all.Offset = 0
-		pendingAll, err := s.Pending(cmd.Context(), all)
-		if err != nil {
-			return err
-		}
-		overdueAll, err := s.Overdue(cmd.Context(), all, time.Now())
-		if err != nil {
-			return err
-		}
-		expiringAll, err := s.Expiring(cmd.Context(), all, days, time.Now())
-		if err != nil {
-			return err
-		}
-		page := func(rows []abc.Record) []abc.Record {
-			if a.Offset >= len(rows) {
-				return []abc.Record{}
-			}
-			rows = rows[a.Offset:]
-			limit := a.Limit
-			if limit == 0 || len(rows) <= limit {
-				return rows
-			}
-			return rows[:limit]
-		}
-		news, err := reference.News(cmd.Context(), "all", 0, true)
-		if err != nil {
-			return err
-		}
-		out := map[string]any{"pending_total": len(pendingAll), "overdue_total": len(overdueAll), "expiring_total": len(expiringAll), "pending": page(pendingAll), "overdue": page(overdueAll), "expiring": page(expiringAll), "news": news}
-		if watch != "" {
-			rows, err := s.Get(cmd.Context(), watch)
-			if err != nil {
-				return err
-			}
-			if len(rows) == 0 {
-				return fmt.Errorf("watched file number %s not found", watch)
-			}
-			out["watch"] = rows
-		}
-		return printJSON(out)
-	}}
-	addAreaFlags(c, &a, 25)
-	c.Flags().StringVar(&watch, "watch", "", "Exact eight-digit file number to include")
-	c.Flags().IntVar(&days, "days", 30, "Expiring horizon")
-	c.Flags().Bool("json", false, "No-op: output is formatted JSON")
-	return c
-}
-
 func newReferenceCmds() []*cobra.Command {
 	var offline bool
 	mk := func(use string, args cobra.PositionalArgs, run func(*cobra.Command, []string) (any, error)) *cobra.Command {

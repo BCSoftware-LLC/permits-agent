@@ -4,6 +4,7 @@ import (
 	"github.com/BCSoftware-LLC/permits-agent/internal/abc"
 	"github.com/spf13/cobra"
 	"regexp"
+	"strings"
 )
 
 // Validate arguments before opening local state or contacting a source.
@@ -29,8 +30,15 @@ func validateFlags(c *cobra.Command, args []string) error {
 	if c.Name() == "get" && len(args) == 1 {
 		file = args[0]
 	}
-	if file != "" && !regexp.MustCompile(`^[0-9]{8}$`).MatchString(file) {
-		return abc.ValidationError{Message: "file number must be exactly eight digits"}
+	if file != "" {
+		for _, f := range strings.Split(file, ",") {
+			if !regexp.MustCompile(`^[0-9]{8}$`).MatchString(strings.TrimSpace(f)) {
+				return abc.ValidationError{Message: "file number must be exactly eight digits"}
+			}
+		}
+	}
+	if c.Name() == "digest" && (str("zips") != "" || str("counties") != "") && (str("zip") != "" || str("city") != "" || str("county") != "" || str("district") != "") {
+		return abc.ValidationError{Message: "use plural areas or one singular area, not both"}
 	}
 	return nil
 }

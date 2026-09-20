@@ -340,6 +340,9 @@ func importCSVLocked(ctx context.Context, csvPath, dbPath string) (result Import
 	if exportDate.IsZero() {
 		return result, errors.New("official export banner did not contain an export date")
 	}
+	if err := validateHistoryDB(ctx, historyPathFor(dbPath)); err != nil {
+		return result, err
+	}
 	if err := os.MkdirAll(filepath.Dir(dbPath), 0o700); err != nil {
 		return result, err
 	}
@@ -438,9 +441,6 @@ CREATE TABLE metadata (key TEXT PRIMARY KEY, value TEXT NOT NULL);`
 	if _, err := db.ExecContext(ctx, `CREATE INDEX idx_licenses_file ON licenses(file_number); CREATE INDEX idx_licenses_status ON licenses(status); CREATE INDEX idx_licenses_zip ON licenses(prem_zip); CREATE INDEX idx_licenses_city ON licenses(prem_city); CREATE INDEX idx_licenses_county ON licenses(prem_county);`); err != nil {
 		return result, err
 	}
-	if err := snapshotDB(ctx, db, historyPathFor(dbPath), exportDate.Format("2006-01-02")); err != nil {
-		return result, err
-	}
 	if err := db.Close(); err != nil {
 		return result, err
 	}
@@ -450,7 +450,54 @@ CREATE TABLE metadata (key TEXT PRIMARY KEY, value TEXT NOT NULL);`
 	if err := os.Rename(tempPath, dbPath); err != nil {
 		return result, fmt.Errorf("installing rebuilt mirror: %w", err)
 	}
-	return ImportResult{Records: count, ExportDate: exportDate, Database: dbPath}, nil
+	result = ImportResult{Records: count, ExportDate: exportDate, Database: dbPath}
+	installed, err := sql.Open("sqlite", dbPath)
+	if err != nil {
+		return result, fmt.Errorf("mirror installed, history snapshot failed; run history-snapshot: opening installed mirror: %w", err)
+	}
+	installed.SetMaxOpenConns(1)
+	if err := snapshotDB(ctx, installed, historyPathFor(dbPath), exportDate.Format("2006-01-02")); err != nil {
+		_ = installed.Close()
+		return result, fmt.Errorf("mirror installed, history snapshot failed; run history-snapshot: %w", err)
+	}
+	if err := installed.Close(); err != nil {
+		return result, fmt.Errorf("mirror installed, history snapshot failed; run history-snapshot: closing installed mirror: %w", err)
+	}
+	return result, nil
+}
+
+func validateHistoryDB(ctx context.Context, historyPath string) error {
+	if _, err := os.Stat(historyPath); errors.Is(err, os.ErrNotExist) {
+		return nil
+	} else if err != nil {
+		return fmt.Errorf("checking history database: %w", err)
+	}
+	hist, err := sql.Open("sqlite", historyPath)
+	if err != nil {
+		return fmt.Errorf("opening history database: %w", err)
+	}
+	defer hist.Close()
+	hist.SetMaxOpenConns(1)
+	var check string
+	if err := hist.QueryRowContext(ctx, `PRAGMA quick_check`).Scan(&check); err != nil {
+		return fmt.Errorf("validating history database before mirror install: %w", err)
+	}
+	if check != "ok" {
+		return fmt.Errorf("validating history database before mirror install: quick_check=%s", check)
+	}
+	var table string
+	err = hist.QueryRowContext(ctx, `SELECT name FROM sqlite_master WHERE type='table' AND name='history_snapshots'`).Scan(&table)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil
+	}
+	if err != nil {
+		return fmt.Errorf("validating history database before mirror install: %w", err)
+	}
+	var n int
+	if err := hist.QueryRowContext(ctx, `SELECT COUNT(*) FROM history_snapshots`).Scan(&n); err != nil {
+		return fmt.Errorf("validating history database before mirror install: %w", err)
+	}
+	return nil
 }
 
 func snapshotDB(ctx context.Context, db *sql.DB, historyPath, exportDate string) error {
@@ -522,6 +569,10 @@ func snapshotDB(ctx context.Context, db *sql.DB, historyPath, exportDate string)
 }
 
 func EnsureData(ctx context.Context, force bool) (*Store, SnapshotInfo, error) {
+	return ensureData(ctx, force, DownloadExport)
+}
+
+func ensureData(ctx context.Context, force bool, download func(context.Context, string) error) (*Store, SnapshotInfo, error) {
 	dir, csvPath, dbPath, err := CachePaths()
 	if err != nil {
 		return nil, SnapshotInfo{}, err
@@ -535,13 +586,20 @@ func EnsureData(ctx context.Context, force bool) (*Store, SnapshotInfo, error) {
 	err = withExclusiveLock(dbPath, func() error {
 		csvInfo, csvErr := os.Stat(csvPath)
 		shouldDownload := force || csvErr != nil || time.Since(csvInfo.ModTime()) > cacheTTL
+		candidate := csvPath
 		if shouldDownload {
-			if err := DownloadExport(ctx, csvPath); err != nil {
+			f, err := os.CreateTemp(dir, "ABC-candidate-*.csv")
+			if err != nil {
 				return err
 			}
-			refreshed = true
+			candidate = f.Name()
+			_ = f.Close()
+			defer os.Remove(candidate)
+			if err := download(ctx, candidate); err != nil {
+				return err
+			}
 		}
-		csvDate, err := csvExportDate(csvPath)
+		csvDate, err := csvExportDate(candidate)
 		if err != nil {
 			return err
 		}
@@ -552,13 +610,18 @@ func EnsureData(ctx context.Context, force bool) (*Store, SnapshotInfo, error) {
 				_ = existing.Close()
 			}
 		}
-		shouldImport := force || dbDate.IsZero() || csvDate.After(dbDate)
+		shouldImport := shouldDownload || force || dbDate.IsZero() || csvDate.After(dbDate)
 		if shouldImport {
-			imported, err = importCSVLocked(ctx, csvPath, dbPath)
+			imported, err = importCSVLocked(ctx, candidate, dbPath)
 			if err != nil {
 				return err
 			}
 			refreshed = true
+		}
+		if shouldDownload {
+			if err := os.Rename(candidate, csvPath); err != nil {
+				return fmt.Errorf("mirror installed; CSV cache promotion failed: %w", err)
+			}
 		}
 		return nil
 	})
