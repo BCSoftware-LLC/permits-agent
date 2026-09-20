@@ -29,6 +29,8 @@ See [verification](docs/verification.md). Source retrieval worked against SOS, C
 
 ## Continue in this order
 
+September 20 architecture research: read [agent harness and security decision](docs/agent-harness-security.md) before choosing a runtime. It compares Palantir, Codex App Server, OpenAI Agents API/SDK, Cloudflare Workflows, Temporal and Jev; maps current control gaps; and defines acceptance cases. The recommended direction keeps Go case/tool authority, adds durable orchestration, and evaluates a replaceable harness. This is a proposal, not an implemented integration or security certification. Customer PII controls must precede private document intake.
+
 1. Review and merge the candidate only after exact-SHA CI and independent review. Do not silently cut over the existing Python customer integration.
 2. Confirm the owner’s product domain, hosting accounts and spend limits. Deploy staging with encrypted durable state, keys, source refresh, alerts and a tested backup/restore/deletion process. Complete browser and real MCP-client acceptance.
 3. Evaluate the optional owner assistant with an approved model, synthetic scenarios and hard budget. Resolve source-access gaps through supported official paths; do not bypass agency authentication or anti-bot controls.
