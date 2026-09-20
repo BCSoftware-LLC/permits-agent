@@ -1,0 +1,150 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <meta name="robots" content="noindex" />
+    <title>Usage analytics — Permits Agent</title>
+    <link rel="stylesheet" href="/style.css" />
+    <link rel="stylesheet" href="/analytics.css" />
+    <script src="/analytics.js" defer></script>
+  </head>
+  <body>
+    <a class="skip" href="#main">Skip to content</a>
+    <header>
+      <a class="brand" href="/">Permits Agent ↗</a>
+      <nav aria-label="Analytics navigation">
+        <a href="/">Workspace</a
+        ><a href="/developers.html">Agent connections</a>
+      </nav>
+    </header>
+    <main id="main" class="document analytics-page">
+      <p class="eyebrow">OPERATIONS</p>
+      <h1>Understand your traffic.</h1>
+      <p>
+        See which registered clients call the service, which tools they use, and
+        where requests fail. Customer prompts and documents are excluded.
+      </p>
+      <form id="analytics-form" class="analytics-controls">
+        <label
+          >Analytics access key<input
+            id="analytics-key"
+            type="password"
+            autocomplete="off"
+            minlength="32"
+            placeholder="Enter an authorized key"
+        /></label>
+        <label
+          >View<select id="analytics-scope">
+            <option value="tenant">This organization</option>
+            <option value="platform">Whole product · operator access</option>
+          </select></label
+        >
+        <label
+          >Window<select id="analytics-days">
+            <option value="7">Last 7 days</option>
+            <option value="30" selected>Last 30 days</option>
+            <option value="90">Last 90 days</option>
+          </select></label
+        >
+        <button type="submit" class="button small" id="analytics-load">
+          Load analytics
+        </button>
+        <button
+          type="button"
+          class="button small ghost"
+          id="analytics-disconnect"
+        >
+          Disconnect
+        </button>
+      </form>
+      <p class="small muted">
+        The key stays in this tab’s memory until you disconnect or reload.
+        Whole-product access requires a separate operator permission.
+      </p>
+      <p id="analytics-status" role="status">
+        Connect to load measured traffic. No demonstration counts are shown.
+      </p>
+      <div id="analytics-report" hidden>
+        <p id="analytics-window" class="small muted"></p>
+        <div id="analytics-totals" class="metric-grid"></div>
+        <h2>Clients and channels</h2>
+        <p class="small muted">
+          Muse appears only when traffic uses a credential registered to Muse.
+          “Human” and “agent” describe registered credential purpose; shared
+          keys cannot establish who actually made a call.
+        </p>
+        <div class="table-scroll">
+          <table>
+            <caption>
+              Requests by registered client and entry point
+            </caption>
+            <thead>
+              <tr>
+                <th>Client</th>
+                <th>Registered type</th>
+                <th>Agent family</th>
+                <th>Entry point</th>
+                <th>Requests</th>
+                <th>Failed / incomplete</th>
+              </tr>
+            </thead>
+            <tbody id="analytics-clients"></tbody>
+          </table>
+        </div>
+        <h2>Tool activity</h2>
+        <div class="table-scroll">
+          <table>
+            <caption>
+              Tool attempts, including denied or failed calls
+            </caption>
+            <thead>
+              <tr>
+                <th>Client</th>
+                <th>Registered type</th>
+                <th>Agent family</th>
+                <th>Tool</th>
+                <th>Executor</th>
+                <th>Calls</th>
+                <th>Failed / incomplete</th>
+                <th>Mean elapsed time</th>
+              </tr>
+            </thead>
+            <tbody id="analytics-tools"></tbody>
+          </table>
+        </div>
+        <h2>Daily requests</h2>
+        <div id="analytics-daily"></div>
+        <details>
+          <summary>Daily event detail and model usage</summary>
+          <div class="table-scroll">
+            <table>
+              <caption>
+                UTC event aggregates; token usage is only from our owner
+                assistant
+              </caption>
+              <thead>
+                <tr>
+                  <th>Day</th>
+                  <th>Client</th>
+                  <th>Registered type</th>
+                  <th>Agent family</th>
+                  <th>Entry point</th>
+                  <th>Executor</th>
+                  <th>Event</th>
+                  <th>Operation / model</th>
+                  <th>Count</th>
+                  <th>Input tokens</th>
+                  <th>Output tokens</th>
+                </tr>
+              </thead>
+              <tbody id="analytics-events"></tbody>
+            </table>
+          </div>
+        </details>
+        <h2>What these numbers mean</h2>
+        <ul id="analytics-notes"></ul>
+      </div>
+    </main>
+  </body>
+</html>

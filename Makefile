@@ -8,6 +8,7 @@ check:
 	go test -race ./...
 	go mod verify
 	node --check internal/platform/web/app.js
+	node --check internal/platform/web/analytics.js
 	node --test tests/*.test.mjs
 
 build:

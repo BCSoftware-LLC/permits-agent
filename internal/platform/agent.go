@@ -245,6 +245,11 @@ func (s *Store) reserveModel(ctx context.Context, tenant, model string, limit in
 	if err != nil {
 		return "", err
 	}
+	if state, ok := ctx.Value(identityKey{}).(*requestState); ok {
+		if _, err = tx.ExecContext(ctx, "INSERT INTO model_request_link VALUES(?,?)", id, state.requestID); err != nil {
+			return "", err
+		}
+	}
 	return id, tx.Commit()
 }
 func (s *Store) finishModel(ctx context.Context, id, responseID string, input, output int) error {

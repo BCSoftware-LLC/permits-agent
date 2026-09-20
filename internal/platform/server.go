@@ -25,11 +25,12 @@ import (
 var webFiles embed.FS
 
 type Credential struct {
-	Tenant                string   `json:"tenant"`
-	TokenHash             string   `json:"token_hash"`
-	Scopes                []string `json:"scopes"`
-	MonthlyRequestLimit   int      `json:"monthly_request_limit"`
-	MonthlyModelCallLimit int      `json:"monthly_model_call_limit"`
+	Client                *ClientIdentity `json:"client,omitempty"`
+	Tenant                string          `json:"tenant"`
+	TokenHash             string          `json:"token_hash"`
+	Scopes                []string        `json:"scopes"`
+	MonthlyRequestLimit   int             `json:"monthly_request_limit"`
+	MonthlyModelCallLimit int             `json:"monthly_model_call_limit"`
 }
 type Config struct {
 	Agent       *AgentConfig
@@ -40,6 +41,8 @@ type Config struct {
 type identityKey struct{}
 type requestState struct {
 	credential Credential
+	requestID  string
+	operation  string
 	failed     bool
 }
 type App struct {
@@ -67,7 +70,19 @@ func New(cfg Config) (*App, error) {
 	seen := map[string]bool{}
 	limits := map[string]int{}
 	modelLimits := map[string]int{}
+	registeredClients := map[string]ClientIdentity{}
 	for _, c := range cfg.Credentials {
+		if err := validateClient(c.Client); err != nil {
+			return nil, err
+		}
+		if c.Client != nil {
+			id := clientIdentity(c.Client)
+			key := c.Tenant + "\x00" + id.ID
+			if old, ok := registeredClients[key]; ok && old != id {
+				return nil, fmt.Errorf("client credentials must share attribution")
+			}
+			registeredClients[key] = id
+		}
 		if len(c.Tenant) == 0 || len(c.Tenant) > 100 || len(c.TokenHash) != 64 || strings.Trim(c.TokenHash, "0123456789abcdef") != "" || c.MonthlyRequestLimit < 1 || c.MonthlyModelCallLimit < 0 || len(c.Scopes) == 0 {
 			return nil, fmt.Errorf("invalid credential configuration")
 		}
@@ -84,7 +99,7 @@ func New(cfg Config) (*App, error) {
 		}
 		modelLimits[c.Tenant] = c.MonthlyModelCallLimit
 		for _, scope := range c.Scopes {
-			if scope != "research" && scope != "cases:read" && scope != "cases:write" && scope != "agent:read" {
+			if scope != "research" && scope != "cases:read" && scope != "cases:write" && scope != "agent:read" && scope != "analytics:read" && scope != "analytics:all" {
 				return nil, fmt.Errorf("invalid credential scope")
 			}
 		}
@@ -99,7 +114,7 @@ func New(cfg Config) (*App, error) {
 			continue
 		}
 		original := t.Handler
-		a.mcp.AddTool(t.Tool, func(ctx context.Context, r mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		a.mcp.AddTool(t.Tool, a.observeTool(name, func(ctx context.Context, r mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 			state, ok := ctx.Value(identityKey{}).(*requestState)
 			if !ok {
 				return mcp.NewToolResultError("authentication required"), nil
@@ -155,7 +170,7 @@ func New(cfg Config) (*App, error) {
 				state.failed = true
 			}
 			return result, err
-		})
+		}))
 	}
 	mux := http.NewServeMux()
 	mcpHTTP := server.NewStreamableHTTPServer(a.mcp, server.WithStateLess(true), server.WithDisableStreaming(true), server.WithHTTPContextFunc(func(ctx context.Context, r *http.Request) context.Context {
@@ -171,6 +186,7 @@ func New(cfg Config) (*App, error) {
 	})))
 	mux.Handle("/api/call", a.auth(http.HandlerFunc(a.call)))
 	mux.Handle("/api/agent", a.auth(http.HandlerFunc(a.agent)))
+	mux.Handle("/api/analytics", a.auth(http.HandlerFunc(a.analytics)))
 	mux.Handle("/api/usage", a.auth(http.HandlerFunc(a.usage)))
 	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, r *http.Request) { writeJSON(w, 200, map[string]string{"status": "ok"}) })
 	mux.HandleFunc("GET /api/example", func(w http.ResponseWriter, r *http.Request) {
@@ -239,7 +255,7 @@ func (a *App) auth(next http.Handler) http.Handler {
 			writeJSON(w, 401, map[string]string{"error": "valid access key required"})
 			return
 		}
-		id, err := a.config.Store.Reserve(r.Context(), credential.Tenant, r.URL.Path, credential.MonthlyRequestLimit)
+		id, err := a.config.Store.reserveAttributed(r.Context(), credential.Tenant, r.URL.Path, credential.MonthlyRequestLimit, credential.Client)
 		if err != nil {
 			if errors.Is(err, ErrQuota) {
 				w.Header().Set("Retry-After", "60")
@@ -249,7 +265,7 @@ func (a *App) auth(next http.Handler) http.Handler {
 			}
 			return
 		}
-		state := &requestState{credential: *credential}
+		state := &requestState{credential: *credential, requestID: id, operation: r.URL.Path}
 		ctx := context.WithValue(r.Context(), identityKey{}, state)
 		w.Header().Set("X-Request-ID", id)
 		// Persist an incomplete event first. A crash cannot silently lose consumption.

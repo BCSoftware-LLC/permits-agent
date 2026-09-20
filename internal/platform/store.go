@@ -64,6 +64,13 @@ func Open(path string) (*Store, error) {
  CREATE TABLE IF NOT EXISTS source_cache(id TEXT PRIMARY KEY,body TEXT NOT NULL);
  CREATE TABLE IF NOT EXISTS model_usage(id TEXT PRIMARY KEY,tenant TEXT NOT NULL,model TEXT NOT NULL,created_at TEXT NOT NULL,response_id TEXT,input_tokens INTEGER,output_tokens INTEGER);
  CREATE INDEX IF NOT EXISTS model_usage_tenant_date ON model_usage(tenant,created_at);
+ CREATE INDEX IF NOT EXISTS usage_date ON usage(created_at);
+ CREATE INDEX IF NOT EXISTS model_usage_date ON model_usage(created_at);
+ CREATE TABLE IF NOT EXISTS usage_attribution(request_id TEXT PRIMARY KEY,client_id TEXT NOT NULL,actor_kind TEXT NOT NULL,agent_family TEXT NOT NULL);
+ CREATE TABLE IF NOT EXISTS tool_usage(id TEXT PRIMARY KEY,request_id TEXT NOT NULL,tenant TEXT NOT NULL,tool TEXT NOT NULL,executor TEXT NOT NULL,created_at TEXT NOT NULL,outcome TEXT NOT NULL,duration_ms INTEGER NOT NULL);
+ CREATE INDEX IF NOT EXISTS tool_usage_tenant_date ON tool_usage(tenant,created_at);
+ CREATE INDEX IF NOT EXISTS tool_usage_date ON tool_usage(created_at);
+ CREATE TABLE IF NOT EXISTS model_request_link(model_id TEXT PRIMARY KEY,request_id TEXT NOT NULL);
  CREATE TABLE IF NOT EXISTS audit(id TEXT PRIMARY KEY,tenant TEXT NOT NULL,case_id TEXT NOT NULL,operation TEXT NOT NULL,version INTEGER NOT NULL,created_at TEXT NOT NULL);`)
 	if err != nil {
 		db.Close()
@@ -227,6 +234,9 @@ func (s *Store) saveRevision(ctx context.Context, tenant string, c Case, version
 // Reserve durably accounts for every authenticated API request, including
 // failures. These events enforce allowance; they are not Stripe invoices.
 func (s *Store) Reserve(ctx context.Context, tenant, operation string, monthly int) (string, error) {
+	return s.reserveAttributed(ctx, tenant, operation, monthly, nil)
+}
+func (s *Store) reserveAttributed(ctx context.Context, tenant, operation string, monthly int, client *ClientIdentity) (string, error) {
 	t := time.Now().UTC()
 	month := t.Format("2006-01") + "-01T00:00:00.000000000Z"
 	minute := t.Add(-time.Minute).Format("2006-01-02T15:04:05.000000000Z")
@@ -248,6 +258,10 @@ func (s *Store) Reserve(ctx context.Context, tenant, operation string, monthly i
 	id := newID()
 	_, err = tx.ExecContext(ctx, "INSERT INTO usage VALUES(?,?,?,?,?)", id, tenant, operation, now(), "started")
 	if err != nil {
+		return "", err
+	}
+	identity := clientIdentity(client)
+	if _, err = tx.ExecContext(ctx, "INSERT INTO usage_attribution VALUES(?,?,?,?)", id, identity.ID, identity.ActorKind, identity.AgentFamily); err != nil {
 		return "", err
 	}
 	return id, tx.Commit()

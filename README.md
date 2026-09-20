@@ -105,6 +105,8 @@ Run `abc-agent-mcp`, `abc-agent serve`, or `abc-agent mcp` as a subprocess. All 
 
 The host discovers schemas with `tools/list` and resources with `resources/list`; mirror reads and reference calls use the same Go domain code as the CLI. `refresh_data` explicitly downloads public data and changes the local cache, never government records. Local history writes are declared as such. The native subprocess retains local semantics. The separate hosted server provides scoped bearer access and tenant cases; see the hosted section above. The old Python HTTP prototype was not silently ported.
 
+Hosted operator reporting: [usage analytics](docs/usage-analytics.md) explains how to attribute Muse and other agent traffic separately from registered website use. [Procedural workflows](docs/procedural-workflows.md) defines the remaining deadline, physical delivery and receipt engine; it is not implemented by the existing checklist.
+
 ## Verification and operations
 
 ```sh

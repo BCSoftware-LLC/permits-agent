@@ -2,6 +2,15 @@
 
 Date: September 20, 2026 UTC. Native baseline: `615ebf02e3a1101a98b3ab62d8453b7f03ee3f44` (merged PR #1). Candidate source and exact CI SHA are identified by the associated pull request and its checks; release packaging records source commit/tree and refuses dirty source trees.
 
+## Client analytics follow-up — September 20, 2026 UTC
+
+Based on main `c07bc29d4c128568b4a3d3536a2ebd9f089962f9` after PR #2 merged. The follow-up adds registered caller attribution, permissioned reports and the analytics dashboard.
+
+- `make check build audit` passed, including race tests, dashboard identity-switch isolation, indexed tenant/platform history queries, native binaries and vulnerability scan.
+- An isolated built-server HTTP smoke test passed: embedded assets, missing-key rejection, Muse attribution despite spoofed MCP client information, tenant/platform permissions, distinct request/tool populations, and persisted totals after restart. All traffic was synthetic; no live model calls. Aggregate evidence is local under `dogfood-output/analytics-smoke.json`.
+- Independent security and specification review found no remaining blocker after replacing unbounded tenant report scans with indexed predicates. The dashboard now exposes attribution fields that distinguish grouped rows. Final commit pin, packaging and exact-SHA CI are recorded with the follow-up pull request.
+- Actual Muse endpoint and hosted traffic remain unverified. No live deployment, browser visual acceptance or new procedural deadline engine is claimed. The procedural workflow document is a source-backed implementation contract.
+
 ## Local verification
 
 - `make check build audit`: formatting, Go vet, race-enabled package tests, module checksum verification, JavaScript syntax, website state/proxy unit tests, all three native binaries, vulnerability scan. Passed on the candidate during implementation; final exact-SHA checks must also pass.

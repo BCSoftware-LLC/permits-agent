@@ -29,6 +29,8 @@ See [verification](docs/verification.md). Source retrieval worked against SOS, C
 
 ## Continue in this order
 
+Latest work after PR #2 merged into main `c07bc29`: [client usage analytics](docs/usage-analytics.md) adds registered client attribution, tool/model event accounting and a permissioned dashboard in the new candidate. Actual Muse connection/deployment is still unverified; no historical traffic claim is made. [Procedural workflows](docs/procedural-workflows.md) specifies verified deadline rules, physical delivery, departments/attendees, document versions and completion evidence. That domain engine remains implementation work; the existing checklist/reminder is not a procedural scheduler.
+
 Latest product direction: [chat-first experience](docs/chat-first-experience.md). After signup, open directly to chat with the owner's three suggested prompts. Conversations initiate the appropriate workflow and collect case facts progressively. The current form-first pilot and case-required assistant do not yet satisfy that experience; signup, persistent conversations, workflow routing and broader issuer/contact discovery remain implementation work.
 
 September 20 architecture research: read [agent harness and security decision](docs/agent-harness-security.md) before choosing a runtime. It compares Palantir, Codex App Server, OpenAI Agents API/SDK, Cloudflare Workflows, Temporal and Jev; maps current control gaps; and defines acceptance cases. The recommended direction keeps Go case/tool authority, adds durable orchestration, and evaluates a replaceable harness. This is a proposal, not an implemented integration or security certification. Customer PII controls must precede private document intake.
