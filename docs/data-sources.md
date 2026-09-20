@@ -1,73 +1,28 @@
-# Data sources — verified inventory (CA ABC)
+# Public data sources and interpretation
 
-All facts below were verified against the live site on 2026-08-19.
-
-## Primary: daily license export (the data engine)
-
-| | |
-|---|---|
-| URL | `https://www.abc.ca.gov/wp-content/uploads/DailyExport-CSV.zip` |
-| Format | ZIP → single CSV (~27 MB), **~128,870 rows**, refreshed daily |
-| Auth | none; no rate limit observed; robots.txt only disallows /wp-admin/ |
-| Coverage | every license AND pending application in California |
-
-Columns: License Type · File Number · Lic or App · Type Status · Type Orig Iss
-Date · Expir Date · Fee Codes · Dup Counts · Master Ind · Term in # of Months ·
-Geo Code · District · Primary Name · Prem Addr 1/2 · Prem City · Prem State ·
-Prem Zip · DBA Name · Mail Addr · Prem County · Prem Census Tract #
-
-### Quirks (all handled in `abcgov/db.py`)
-- Line 1 is a human banner (`"Updated Tuesday 18th of August 2026 …"`); the
-  real header is line 2 (`skip=1, header=true`).
-- **Dates are `DD-MON-YYYY`** (e.g. `31-DEC-2026`) — must strptime; naive
-  string compare is wrong.
-- **File numbers are NOT unique** — one file number = multiple rows (one per
-  license type). `get` returns all rows.
-- **Header names with leading spaces** (`" Prem Addr 2"`, `" Prem Zip"`, …)
-  are trimmed by DuckDB's `read_csv_auto` — renames use trimmed names.
-- Statuses currently observed: ACTIVE (118,981) · PEND (6,620) · SUREND (2,376)
-  · REVPEN (410) · SUSPEN (357) · R64B (126). `Lic or App`: LIC 108,840 / APP 20,030.
-- Some premises addresses are empty for pending apps; zip may carry `-NNNN`.
-
-### Address identification
-`prem_addr1/2` + `prem_city` + `prem_zip` + `prem_state` identify the licensed
-premises; `mail_addr1/2` + `mail_city` + `mail_zip` identify the owner/entity.
-`licenses_at_address` matches premises (or + mail with `match_mail=true`) —
-every license tied to one physical address, including multi-permit sites
-(e.g. a hotel holding 47/58/66/68/77 together) and same-owner portfolios.
-
-### Status vocabulary (ABC LQS glossary, captured 2026-08-19)
-The export only shows a subset at any moment; licenses move through the full
-vocabulary: ACTIVE · PEND · DENY · INACT · ISSUPD · NREN · R64B (Issue And
-Hold) · R65 · REV (Revocation) · REVP (Revocation Pending Due To Non-Payment —
-the **auto-revocation path**) · REVPEN · RNST · SUSPEN · SUREND · S/REV ·
-SLMS · VOID · WDRL. Derived: **OVERDUE** = still ACTIVE past expiration
-(2,553 statewide on 2026-08-19) — renewal-failure / auto-revocation candidates.
-
-## Reference pages (scraped once, cached as JSON)
-
-| Source | URL | What we extract |
+| Surface | Official source | Interpretation |
 |---|---|---|
-| License types | `/licensing/license-types/` | 86 codes + names + descriptions. **Page's div ids are toggle counters, not codes** — code lives in the h3 heading. |
-| Forms | `/licensing/license-forms/` | 87 forms: number, title, revised date, PDF URL under `/wp-content/uploads/forms/ABC-XXX.pdf` |
-| Fees | `/licensing/license-fees/` | statutory surcharge table (Appeals Board 3%, CHP $10, Business Practices) + page text. Base annual/application fee schedules are prose/documents, not tables — belongs to Layer 2 calculator. |
-| News | `/feed/` | WordPress RSS (news releases) |
-| Advisories | `/industry-advisories/` | **The `…/feed/` URL serves a comments feed (0 items)** — we parse the category page's article list instead. |
+| License/application mirror | https://www.abc.ca.gov/wp-content/uploads/DailyExport-CSV.zip | Daily published snapshot, not a real-time or complete historical register |
+| Status definitions | https://www.abc.ca.gov/licensing/license-lookup/glossary/ | Official status is distinct from derived overdue flags |
+| License types | https://www.abc.ca.gov/licensing/license-types/ | Parse current public reference; fail on unrecognized shape |
+| Forms index | https://www.abc.ca.gov/licensing/license-forms/ | Links and revision labels, not downloaded filing packages |
+| Fees | https://www.abc.ca.gov/licensing/license-fees/ | Published reference, not a quote or fee-calculation engine |
+| News | https://www.abc.ca.gov/feed/ | Items provided by the current feed, not unlimited archive coverage |
+| Industry advisories | https://www.abc.ca.gov/industry-advisories/ | Current advisory listing; older paginated archive is not implied |
+| Requirements | Official ABC licensing pages cited per result | Dated, manually curated mappings; forms-index freshness does not imply legal re-verification |
 
-## Interactive lookup / filing surfaces
+## License records
 
-| Surface | Reality |
-|---|---|
-| `lookup.abc.ca.gov` | **Dead** — no longer resolves; lookup merged into the main site's report pages + our mirror |
-| Report pages (`licenses-by-zip`, `license-number`, …) | WordPress pages; the daily export covers the same data with more flexibility |
-| `abcbiz.abc.ca.gov` | Authenticated portal (CloudFront 403 to anonymous), no public API. RBS portal + License Administrator. **The filing channel — Layer 3, credential-gated.** |
-| data.ca.gov (Socrata) | No ABC license dataset found (catalog query empty) |
+The CSV includes a BOM, a dated banner, and an official header. File numbers are literal eight-digit strings. License/application/type rows are not necessarily unique businesses or unique file numbers. A site can have multiple associated records. Record counts must never be described as counts of unique businesses.
 
-## Operational rules
+Address matching is literal case-insensitive substring matching against premises fields (optionally mailing fields). It is not geocoding or proof of parcel identity. Area filters use documented prefix matching; one selector is accepted at a time. Results preserve official spellings. `--limit 0` returns all matches; otherwise list length is only the returned page size.
 
-- One export download per TTL (default 12h) — the mirror exists so we never
-  hammer the site.
-- Cache files live in `~/.cache/abc-agent/` (env `ABC_AGENT_CACHE`), never in
-  the repo.
-- If the export is missing/stale, tools surface the snapshot date — never
-  fabricate or serve stale data as fresh.
+Status codes observed in an export do not exhaust the official glossary. REV/REVP and other glossary states may be absent from today's export. Overdue means an ACTIVE LIC whose expiration precedes today's California date. It is a **renewal/auto-revocation follow-up candidate**, not proof ABC revoked the license or that the business may lawfully operate. Unknown future source status codes remain visible in statistics; do not silently translate them to invented states.
+
+## Freshness and limits
+
+Use `stats`, `statuses`, and `doctor` to inspect source/export/load metadata. Read commands operate offline against the existing mirror; they do not initiate refresh. Run `refresh --force` when a current source check is required. The published export can remain old even after a successful download.
+
+References cache separately with fetched timestamp, source and stale/offline labels. `--offline` requests no network access. A returned stale fallback must be treated as stale. Parser failures must never become fabricated fallback types or apparently successful empty datasets.
+
+Requirements support only the mapped type/action combinations; unmapped requests fail explicitly. Business-specific entity, location, enforcement and filing circumstances require human review with ABC. The tool neither submits applications nor determines legal compliance.

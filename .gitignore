@@ -1,24 +1,20 @@
-# Python
-__pycache__/
-*.py[cod]
-.venv/
-*.egg-info/
-dist/
-build/
-
-# Local mirrors / caches (never commit)
+# Build products and local data never belong in source control.
+/bin/
+/dist/
+/dogfood-output/
+*.sqlite
+*.sqlite-*
 *.duckdb
 *.csv
-license_types.json
-forms_index.json
-fees.json
-
-# OS / editors
-.DS_Store
-*.swp
-.idea/
-.vscode/
-
-# Env / secrets
+*.zip
+*.download
+*.tmp
+coverage.out
 .env
 .env.*
+.DS_Store
+# Retained local Python environment from the historical implementation.
+.venv/
+__pycache__/
+*.py[cod]
+*.egg-info/

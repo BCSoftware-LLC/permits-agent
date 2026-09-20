@@ -1,68 +1,31 @@
-# Architecture — permits-agent
+# Architecture
 
-## Product thesis
+## ADR-001: native Go, local public-data mirror
 
-Business owners need agents that can **file documents and gather information on
-legacy government websites** — better than a human can. Most agencies have no
-public API, but nearly all publish *something* machine-readable: bulk exports,
-form libraries, RSS. The winning move is a **local mirror + compound queries**
-(Steinberger's discrawl/gogcli playbook, also the core idea behind
-printingpress.dev) — not scraping live pages.
+**Decision:** ship one native Go public-data CLI and stdio MCP server. Go supersedes Python as the delivery target. The private repository remains `BCSoftware-LLC/permits-agent`; the handwritten Python baseline survives in Git at `075cd473330fc51e95a507e628bb6dea89f82179`. The initial Go scaffold came from cli-printing-press 4.31.1; see [notices](../THIRD_PARTY_NOTICES.md). No generated code is presumed verified.
 
-## Three layers
+### Small module boundaries
 
-| Layer | What | Status |
-|---|---|---|
-| **1. Data & compliance engine** | Daily-synced local mirror; status tracking, pending-application monitoring, expiration/renewal radar, news/advisories, forms index, fee info. MCP tools + CLI. | ✅ **Shipped (ABC reference adapter), verified live** |
-| **2. Document assembly** | Intake → auto-filled application packet (fillable PDFs at predictable URLs + cover sheets + fee estimate + per-type/district submission checklist). Owner signs; agent files. The $500–$2,000 consultant replacement. | 🚧 In progress — requirements layer shipped (`abc-agent requirements`, 12 retail types × new/transfer/renewal, every entry sourced to abc.ca.gov) |
-| **3. Guided e-filing** | Browser automation against the authenticated portal (e.g. `abcbiz.abc.ca.gov`, CloudFront, no public API) under the customer's own account, human approval gates at submit/payment. | 🔒 Gated — needs legal review + product decisions |
+- `internal/abc`: official-export download/import, SQLite license mirror, validation, literal filters, expiration rules, source/status metadata, local snapshots/diffs.
+- `internal/reference`: source-backed types/forms/fees/news and explicitly curated requirements. Source provenance, freshness, atomic local cache and offline behavior live here, not in adapters.
+- `internal/cli`: Cobra commands; JSON on stdout, diagnostics on stderr; no SQL or hidden refresh on reads.
+- `internal/mcpserver`: MCP tool/resource schemas and handlers over stdio; shared domain APIs, not alternate business rules.
+- `cmd/abc-agent` and `cmd/abc-agent-mcp`: process entrypoints.
 
-Layer 1 is also the **lead-gen radar**: every PEND application in a zip code
-is visible the day it appears.
+SQLite uses the pure-Go modernc driver, allowing CGO-disabled macOS/Linux binaries. No Python, DuckDB, service, database credentials, or container is required. Cache root is `ABC_AGENT_CACHE`, legacy `ABC_PP_CACHE`, then the native OS cache directory plus `abc-agent`. Old Python caches are never migrated or deleted implicitly.
 
-## Adapter pattern
+### State and correctness
 
-```
-agency/
-  client.py    # fetch + cache the agency's public data (CSV export, PDFs, RSS)
-  db.py        # load into DuckDB, expose typed queries
-  cli.py       # compound commands
-  server.py    # MCP tools (same surface per agency)
-```
+Read commands open an existing mirror and never refresh implicitly. Explicit `refresh` downloads/imports official public data with bounded input and rejects invalid sources while preserving the previous mirror. Expiration comparisons use California calendar dates; overdue is a derived follow-up candidate, not official revocation. The original address SQL grouping defect must not recur. All record-list queries retain multi-record identities and support documented limits/offsets.
 
-One MCP surface, N adapters → one agent platform for permit compliance across
-agencies. `abcgov/` is the reference implementation; agency #2 should be
-chosen to prove the pattern generalizes (e.g. CA contractors board, DOJ
-firearms, county business licenses, TTB).
+History is local evidence from exports actually loaded, not a statewide event archive. One snapshot per export date; refreshing the same source date is idempotent. `diff` needs distinct export dates for a meaningful comparison. No inferred filing dates or real-time status promises.
 
-## Data pipeline (ABC adapter)
+### Trust boundaries
 
-1. Daily export zip: `https://www.abc.ca.gov/wp-content/uploads/DailyExport-CSV.zip`
-   (~7.4 MB → ~27 MB CSV, ~129k rows, refreshed daily, no auth).
-2. Cache-aware downloader (12h TTL default, `ABC_AGENT_TTL` env).
-3. Load into DuckDB file (`~/.cache/abc-agent/abc.duckdb`), indexed on file
-   number / name / status. Rebuilt when the source CSV is newer.
-4. Query API → CLI + MCP tools.
+The CLI accepts untrusted arguments; MCP accepts untrusted typed JSON arguments. Validation belongs at public data interfaces as well as transport parsing. Official public pages are untrusted network input: bound bytes/time, reject parser drift, restrict redirects, preserve valid cached data. Do not label stale cache fallback a live response.
 
-## MCP surface (11 tools)
+The stdio server inherits the invoking OS user's local privileges and cache. There is no public listener, hosted API-key authentication, tenant isolation, or filing authority in this release. Old hosted Python/payment proposals are historical Git documents, not working or approved features. Government writes, applicant records, payments, and outbound communication remain separate approval-gated work.
 
-search_licenses · get_license · pending_applications · expiring_licenses ·
-licenses_in_area · license_stats · license_type_description · search_forms ·
-latest_news · fee_surcharges · refresh_data — plus resources `abc://license-types`
-and `abc://stats`.
+### Verification
 
-## Guardrails
-
-- Public data only, official channels, one fetch per TTL. Never hammer.
-- No credentials in repo. Portal automation (Layer 3) only under the
-  customer's account with explicit authorization + approval gates.
-- Sworn statements: applicant signs, agent prepares/files.
-- Regulatory review before charging for filing services.
-
-## Roadmap
-
-1. Document assembly spike (intake → ABC-211 packet + fee estimate for one
-   license type, e.g. new on-sale restaurant 47).
-2. Agency #2 adapter (prove generalization).
-3. Daily digest cron: new PEND filings + expiring licenses per territory.
-4. Priority-registration lottery monitoring (the scarce new-license resource).
+See [Go release contract](go-v1-contract.md). `make check build audit` covers formatting, vet, race tests, module integrity, native binaries and called-code vulnerability scanning. `make release` cross-builds macOS/Linux arm64/amd64 binaries with checksums. GitHub CI runs native checks on macOS/Linux and retains private artifacts. Live official-source dogfood is deliberately separate from deterministic network-independent tests. See `docs/verification.md` when release evidence has been recorded.
