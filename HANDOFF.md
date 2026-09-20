@@ -29,6 +29,8 @@ See [verification](docs/verification.md). Source retrieval worked against SOS, C
 
 ## Continue in this order
 
+Latest product direction: [chat-first experience](docs/chat-first-experience.md). After signup, open directly to chat with the owner's three suggested prompts. Conversations initiate the appropriate workflow and collect case facts progressively. The current form-first pilot and case-required assistant do not yet satisfy that experience; signup, persistent conversations, workflow routing and broader issuer/contact discovery remain implementation work.
+
 September 20 architecture research: read [agent harness and security decision](docs/agent-harness-security.md) before choosing a runtime. It compares Palantir, Codex App Server, OpenAI Agents API/SDK, Cloudflare Workflows, Temporal and Jev; maps current control gaps; and defines acceptance cases. The recommended direction keeps Go case/tool authority, adds durable orchestration, and evaluates a replaceable harness. This is a proposal, not an implemented integration or security certification. Customer PII controls must precede private document intake.
 
 1. Review and merge the candidate only after exact-SHA CI and independent review. Do not silently cut over the existing Python customer integration.
